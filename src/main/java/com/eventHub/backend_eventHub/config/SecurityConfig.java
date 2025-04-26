@@ -3,9 +3,9 @@ package com.eventHub.backend_eventHub.config;
 
 
 
-import com.eventHub.backend_eventHub.jwt.JwtAuthenticationFilter;
-import com.eventHub.backend_eventHub.jwt.JwtEntryPoint;
-import com.eventHub.backend_eventHub.services.UserService;
+import com.eventHub.backend_eventHub.auth.jwt.JwtAuthenticationFilter;
+import com.eventHub.backend_eventHub.auth.jwt.JwtEntryPoint;
+import com.eventHub.backend_eventHub.users.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
