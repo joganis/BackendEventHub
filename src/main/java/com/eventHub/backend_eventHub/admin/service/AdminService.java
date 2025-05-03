@@ -4,9 +4,9 @@ package com.eventHub.backend_eventHub.admin.service;
 import com.eventHub.backend_eventHub.admin.dto.NewAdminDto;
 import com.eventHub.backend_eventHub.domain.entities.Role;
 import com.eventHub.backend_eventHub.domain.entities.Users;
-import com.eventHub.backend_eventHub.enums.RoleList;
+import com.eventHub.backend_eventHub.domain.enums.RoleList;
 import com.eventHub.backend_eventHub.domain.repositories.RoleRepository;
-import com.eventHub.backend_eventHub.users.service.UserService;
+import com.eventHub.backend_eventHub.auth.service.UserAuthService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -20,13 +20,13 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class AdminService {
 
-    private final UserService userService;
+    private final UserAuthService userAuthService;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
 
     @Autowired
-    public AdminService(UserService userService, RoleRepository roleRepository, PasswordEncoder passwordEncoder) {
-        this.userService = userService;
+    public AdminService(UserAuthService userAuthService, RoleRepository roleRepository, PasswordEncoder passwordEncoder) {
+        this.userAuthService = userAuthService;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
     }
@@ -38,9 +38,10 @@ public class AdminService {
      *
      * @param newAdminDto Datos del nuevo administrador.
      */
+
     @Transactional
     public void registerAdmin(NewAdminDto newAdminDto) {
-        if (userService.existsByUserName(newAdminDto.getUserName())) {
+        if (userAuthService.existsByUserName(newAdminDto.getUserName())) {
             throw new IllegalArgumentException("El nombre de usuario ya existe");
         }
         // Validar y convertir el rol proporcionado
@@ -61,6 +62,6 @@ public class AdminService {
                 passwordEncoder.encode(newAdminDto.getPassword()),
                 roleAdmin
         );
-        userService.save(user);
+        userAuthService.save(user);
     }
 }

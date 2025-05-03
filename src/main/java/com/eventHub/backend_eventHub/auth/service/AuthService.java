@@ -2,12 +2,11 @@ package com.eventHub.backend_eventHub.auth.service;
 
 
 import com.eventHub.backend_eventHub.auth.dto.NewUserDto;
-import com.eventHub.backend_eventHub.users.service.UserService;
 import com.eventHub.backend_eventHub.utils.emails.dto.EmailDto;
 
 import com.eventHub.backend_eventHub.domain.entities.Role;
 import com.eventHub.backend_eventHub.domain.entities.Users;
-import com.eventHub.backend_eventHub.enums.RoleList;
+import com.eventHub.backend_eventHub.domain.enums.RoleList;
 import com.eventHub.backend_eventHub.auth.jwt.JwtUtil;
 import com.eventHub.backend_eventHub.domain.repositories.RoleRepository;
 import com.eventHub.backend_eventHub.utils.emails.service.EmailService;
@@ -28,9 +27,9 @@ import org.springframework.transaction.annotation.Transactional;
  * y el envío de correos de confirmación.
  */
 @Service
-public class AuthService {
+public class   AuthService {
 
-    private final UserService userService;
+    private final UserAuthService userAuthService;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
@@ -38,13 +37,13 @@ public class AuthService {
     private final EmailService emailService;
 
     @Autowired
-    public AuthService(UserService userService,
+    public AuthService(UserAuthService userAuthService,
                        RoleRepository roleRepository,
                        PasswordEncoder passwordEncoder,
                        JwtUtil jwtUtil,
                        EmailService emailService,
                        AuthenticationManagerBuilder authenticationManagerBuilder) {
-        this.userService = userService;
+        this.userAuthService = userAuthService;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
         this.emailService = emailService;
@@ -68,7 +67,7 @@ public class AuthService {
         }
         Authentication authResult = authManager.authenticate(authenticationToken);
         SecurityContextHolder.getContext().setAuthentication(authResult);
-        Users user = userService.findByUserName(username)
+        Users user = userAuthService.findByUserName(username)
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
         String role = user.getRole().getNombreRol().toString();
         return jwtUtil.generateToken(authResult, role);
@@ -81,7 +80,7 @@ public class AuthService {
      */
     @Transactional
     public void registerUser(NewUserDto newUserDto) {
-        if (userService.existsByUserName(newUserDto.getUserName())) {
+        if (userAuthService.existsByUserName(newUserDto.getUserName())) {
             throw new IllegalArgumentException("El nombre de usuario ya existe");
         }
         // Asignación automática del rol por defecto (ROLE_USER)
@@ -92,7 +91,7 @@ public class AuthService {
                 newUserDto.getEmail(),
                 passwordEncoder.encode(newUserDto.getPassword()),roleUser
         );
-        userService.save(user);
+        userAuthService.save(user);
         // Enviar correo de confirmación
         EmailDto emailDto = new EmailDto();
         emailDto.setRecipientEmail(newUserDto.getEmail());

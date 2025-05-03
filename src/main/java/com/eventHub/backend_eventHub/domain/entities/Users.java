@@ -3,6 +3,7 @@ package com.eventHub.backend_eventHub.domain.entities;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -36,18 +37,29 @@ public class Users {
 
     @NotBlank
     private String password;
-
-    private String nombre;
-    private String telefono;
-    private String direccion;
-    private String fotoPerfil;
-    private String biografia;
-
     /**
      * Referencia al rol global asignado al usuario.
      */
     @DBRef
     private Role role;
+
+
+    @Size(min = 3, max = 130)
+    private String name;
+    private String lastName;
+
+    @Size(max = 10)
+    private String identification;
+    private String birthDate;
+    private String phone;
+    private String homeAddress;
+    private String country;
+    private String city;
+
+    @DBRef
+    private State state;
+    private String photo;
+
 
     public Users(String userName, String email, String password, Role role) {
         this.userName = userName;
@@ -88,45 +100,7 @@ public class Users {
         this.password = password;
     }
 
-    public String getNombre() {
-        return nombre;
-    }
 
-    public void setNombre(String nombre) {
-        this.nombre = nombre;
-    }
-
-    public String getTelefono() {
-        return telefono;
-    }
-
-    public void setTelefono(String telefono) {
-        this.telefono = telefono;
-    }
-
-    public String getDireccion() {
-        return direccion;
-    }
-
-    public void setDireccion(String direccion) {
-        this.direccion = direccion;
-    }
-
-    public String getFotoPerfil() {
-        return fotoPerfil;
-    }
-
-    public void setFotoPerfil(String fotoPerfil) {
-        this.fotoPerfil = fotoPerfil;
-    }
-
-    public String getBiografia() {
-        return biografia;
-    }
-
-    public void setBiografia(String biografia) {
-        this.biografia = biografia;
-    }
 
     public Role getRole() {
         return role;
@@ -134,5 +108,85 @@ public class Users {
 
     public void setRole(Role role) {
         this.role = role;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public String getLastName() {
+        return lastName;
+    }
+
+    public void setLastName(String lastName) {
+        this.lastName = lastName;
+    }
+
+    public String getIdentification() {
+        return identification;
+    }
+
+    public void setIdentification(String identification) {
+        this.identification = identification;
+    }
+
+    public String getBirthDate() {
+        return birthDate;
+    }
+
+    public void setBirthDate(String birthDate) {
+        this.birthDate = birthDate;
+    }
+
+    public String getPhone() {
+        return phone;
+    }
+
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
+
+    public String getHomeAddress() {
+        return homeAddress;
+    }
+
+    public void setHomeAddress(String homeAddress) {
+        this.homeAddress = homeAddress;
+    }
+
+    public String getCountry() {
+        return country;
+    }
+
+    public void setCountry(String country) {
+        this.country = country;
+    }
+
+    public String getCity() {
+        return city;
+    }
+
+    public void setCity(String city) {
+        this.city = city;
+    }
+
+    public State getState() {
+        return state;
+    }
+
+    public void setState(State state) {
+        this.state = state;
+    }
+
+    public String getPhoto() {
+        return photo;
+    }
+
+    public void setPhoto(String photo) {
+        this.photo = photo;
     }
 }

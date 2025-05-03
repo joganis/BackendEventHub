@@ -5,7 +5,7 @@ package com.eventHub.backend_eventHub.config;
 
 import com.eventHub.backend_eventHub.auth.jwt.JwtAuthenticationFilter;
 import com.eventHub.backend_eventHub.auth.jwt.JwtEntryPoint;
-import com.eventHub.backend_eventHub.users.service.UserService;
+import com.eventHub.backend_eventHub.auth.service.UserAuthService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -40,7 +40,7 @@ import java.util.List;
 public class SecurityConfig {
 
     @Autowired
-    private UserService userService;
+    private UserAuthService userAuthService;
 
     @Autowired
     private JwtEntryPoint jwtEntryPoint;
@@ -66,7 +66,7 @@ public class SecurityConfig {
     @Bean
     public DaoAuthenticationProvider authenticationProvider() {
         DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
-        authProvider.setUserDetailsService(userService);
+        authProvider.setUserDetailsService(userAuthService);
         authProvider.setPasswordEncoder(passwordEncoder());
         return authProvider;
     }

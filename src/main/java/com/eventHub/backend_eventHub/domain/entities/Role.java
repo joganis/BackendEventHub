@@ -3,7 +3,7 @@ package com.eventHub.backend_eventHub.domain.entities;
 
 
 
-import com.eventHub.backend_eventHub.enums.RoleList;
+import com.eventHub.backend_eventHub.domain.enums.RoleList;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;

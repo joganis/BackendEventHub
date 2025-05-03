@@ -4,7 +4,7 @@ package com.eventHub.backend_eventHub.domain.repositories;
 
 
 import com.eventHub.backend_eventHub.domain.entities.Role;
-import com.eventHub.backend_eventHub.enums.RoleList;
+import com.eventHub.backend_eventHub.domain.enums.RoleList;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
 

@@ -1,4 +1,4 @@
-package com.eventHub.backend_eventHub.enums;
+package com.eventHub.backend_eventHub.domain.enums;
 
 public enum RoleList {
     ROLE_ADMIN,

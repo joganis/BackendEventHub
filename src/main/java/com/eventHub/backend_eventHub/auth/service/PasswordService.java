@@ -2,7 +2,6 @@ package com.eventHub.backend_eventHub.auth.service;
 
 
 
-import com.eventHub.backend_eventHub.users.service.UserService;
 import com.eventHub.backend_eventHub.utils.emails.dto.EmailDto;
 import com.eventHub.backend_eventHub.auth.dto.RecoveryRequestDto;
 import com.eventHub.backend_eventHub.auth.dto.ResetPasswordDto;
@@ -32,7 +31,7 @@ public class PasswordService {
     private JwtUtil jwtUtil;
 
     @Autowired
-    private UserService userService;  // Servicio que implementa UserDetailsService
+    private UserAuthService userAuthService;  // Servicio que implementa UserDetailsService
 
     /**
      * Procesa la solicitud de recuperación de contraseña.
