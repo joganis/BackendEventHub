@@ -44,6 +44,7 @@ public class JwtUtil {
         SecretKey key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         Map<String, Object> claims = new HashMap<>();
         claims.put("role", role);
+        claims.put("id", mainUser);
         return Jwts.builder()
                 .setClaims(claims)
                 .setSubject(mainUser.getUsername())

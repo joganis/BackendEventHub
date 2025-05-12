@@ -9,6 +9,7 @@ import com.eventHub.backend_eventHub.auth.service.UserAuthService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -55,8 +56,18 @@ public class SecurityConfig {
                 .exceptionHandling(exception -> exception.authenticationEntryPoint(jwtEntryPoint))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/auth/**","/password/**").permitAll()          // Endpoints públicos para login y registro.
+                        .requestMatchers("/auth/**","/password/**","/actuator/health", "/actuator/info").permitAll()          // Endpoints públicos para login y registro.
                         .requestMatchers("/admin/**").hasRole("ADMIN")      // Endpoints administrativos protegidos.
+                        // → Perfil propio de usuario: cualquier autenticado
+                        .requestMatchers(HttpMethod.GET,  "/users/me",    "/users/me/**")
+                        .authenticated()
+                        .requestMatchers(HttpMethod.PUT,  "/users/me",    "/users/me/**")
+                        .authenticated()
+
+                        // → Gestión completa de usuarios (listar, buscar, cambiar estado)
+                        //    solo ADMIN
+                        .requestMatchers("/users/**")
+                        .hasRole("ADMIN")
                         .anyRequest().authenticated()                      // El resto de endpoints requieren autenticación.
                 );
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

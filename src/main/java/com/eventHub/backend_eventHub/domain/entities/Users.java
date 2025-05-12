@@ -1,6 +1,5 @@
 package com.eventHub.backend_eventHub.domain.entities;
 
-
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -11,7 +10,6 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.DBRef;
 import org.springframework.data.mongodb.core.mapping.Document;
-
 
 /**
  * Entidad que representa a un usuario en el sistema.
@@ -37,12 +35,12 @@ public class Users {
 
     @NotBlank
     private String password;
+
     /**
      * Referencia al rol global asignado al usuario.
      */
     @DBRef
     private Role role;
-
 
     @Size(min = 3, max = 130)
     private String name;
@@ -56,18 +54,35 @@ public class Users {
     private String country;
     private String city;
 
+    /**
+     * Referencia al estado del usuario (Active, Inactive, etc.)
+     * Importante: Este campo no debe ser nulo para evitar NullPointerException
+     */
     @DBRef
     private State state;
-    private String photo;
 
+    private String photo;
 
     public Users(String userName, String email, String password, Role role) {
         this.userName = userName;
         this.email = email;
         this.password = password;
         this.role = role;
+        // No se inicializa state aquí - debe hacerse en el servicio
     }
 
+    /**
+     * Constructor completo con estado incluido para evitar usuarios sin estado
+     */
+    public Users(String userName, String email, String password, Role role, State state) {
+        this.userName = userName;
+        this.email = email;
+        this.password = password;
+        this.role = role;
+        this.state = state;
+    }
+
+    // Getters y setters...
     public String getId() {
         return id;
     }
@@ -99,8 +114,6 @@ public class Users {
     public void setPassword(@NotBlank String password) {
         this.password = password;
     }
-
-
 
     public Role getRole() {
         return role;

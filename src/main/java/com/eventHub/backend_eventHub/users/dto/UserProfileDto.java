@@ -11,7 +11,7 @@ public class UserProfileDto {
     private String userName;
     private String email;
     private String password;
-    private Role role;
+    private String role;
     private String name;
     private String lastName;
     private String identification;
@@ -20,6 +20,6 @@ public class UserProfileDto {
     private String homeAddress;
     private String country;
     private String city;
-    private State state;
+    private String state;
     private String photo;
 }
