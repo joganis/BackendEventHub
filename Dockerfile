@@ -10,5 +10,5 @@ COPY target/backend-eventHub-0.0.1-SNAPSHOT.jar app.jar
 # 4. Expón el puerto 8070
 EXPOSE 8070
 
-# 5. Comando que se ejecuta al arrancar el contenedor
-ENTRYPOINT ["java","-jar","app.jar"]
+# 5. Arranca leyendo la variable de entorno PORT
+ENTRYPOINT ["sh","-c","java -Dserver.port=${PORT} -jar app.jar"]
