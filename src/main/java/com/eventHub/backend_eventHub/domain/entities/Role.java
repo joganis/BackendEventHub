@@ -35,4 +35,28 @@ public class Role {
      * Lista de permisos asociados a este rol.
      */
     private List<Permission> permissions;
+
+    public String getId() {
+        return id;
+    }
+
+    public void setId(String id) {
+        this.id = id;
+    }
+
+    public RoleList getNombreRol() {
+        return nombreRol;
+    }
+
+    public void setNombreRol(RoleList nombreRol) {
+        this.nombreRol = nombreRol;
+    }
+
+    public List<Permission> getPermissions() {
+        return permissions;
+    }
+
+    public void setPermissions(List<Permission> permissions) {
+        this.permissions = permissions;
+    }
 }

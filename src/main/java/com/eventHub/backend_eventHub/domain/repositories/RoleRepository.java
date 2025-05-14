@@ -18,4 +18,5 @@ import java.util.Optional;
 @Repository
 public interface RoleRepository extends MongoRepository<Role, String> {
     Optional<Role> findByNombreRol(RoleList nombreRol);
+    Optional<Role> findByNombreRolIgnoreCase(String nombreRol);
 }

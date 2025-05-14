@@ -72,7 +72,8 @@
 		<dependency>
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>
-			<optional>true</optional>
+			<version>1.18.32</version> <!-- Usa la versión más reciente disponible -->
+			<scope>provided</scope>
 		</dependency>
 
 		<!-- Jakarta Validation (Bean Validation) -->
@@ -138,7 +139,21 @@
 			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
 			<version>2.1.0</version>
 		</dependency>
+		<!--  mapstruct-->
+		<dependency>
+			   <groupId>org.mapstruct</groupId>
+			   <artifactId>mapstruct</artifactId>
+			   <version>1.5.3.Final</version>
+			 </dependency>
+		 <dependency>
+		   <groupId>org.mapstruct</groupId>
+		    <artifactId>mapstruct-processor</artifactId>
+		   <version>1.5.3.Final</version>
+		    <scope>provided</scope>
+		 </dependency>
+
 	</dependencies>
+
 
 	<build>
 		<resources>
@@ -151,6 +166,34 @@
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<version>3.8.1</version>
+				<configuration>
+					<source>17</source>
+					<target>17</target>
+					<annotationProcessorPaths>
+						<!-- Aquí indicas a Maven que use el procesador de MapStruct -->
+						<path>
+							<groupId>org.mapstruct</groupId>
+							<artifactId>mapstruct-processor</artifactId>
+							<version>1.5.3.Final</version>
+						</path>
+						<path>
+							<groupId>org.mapstruct</groupId>
+							<artifactId>mapstruct-processor</artifactId>
+							<version>1.5.3.Final</version>
+						</path>
+						<path>
+							<groupId>org.projectlombok</groupId>
+							<artifactId>lombok</artifactId>
+							<version>1.18.32</version>
+						</path>
+					</annotationProcessorPaths>
+				</configuration>
 			</plugin>
 		</plugins>
 	</build>

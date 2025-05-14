@@ -29,4 +29,5 @@ public interface StateRepository extends MongoRepository<State, String> {
      * @return Optional con el estado si existe, o vacío si no
      */
     Optional<State> findByNameState(StateList stateEnum);
+
 }
