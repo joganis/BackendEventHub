@@ -82,7 +82,8 @@ public class SecurityConfig {
         configuration.setAllowCredentials(true); // se agrego el 22 para cors
         configuration.setAllowedOrigins(List.of(
                 "http://localhost:4200",
-                "http://localhost:5173"
+                "http://localhost:5173",
+                "https://even-hub.vercel.app/"
         ));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
