@@ -1,8 +1,5 @@
 package com.eventHub.backend_eventHub.config;
 
-
-
-
 import com.eventHub.backend_eventHub.auth.jwt.JwtAuthenticationFilter;
 import com.eventHub.backend_eventHub.auth.jwt.JwtEntryPoint;
 import com.eventHub.backend_eventHub.auth.service.UserAuthService;
@@ -26,16 +23,6 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
 
-/**
- * Configuración de seguridad para la aplicación.
- *
- * Se configura:
- * - Deshabilitar CSRF (apropiado para APIs sin estado).
- * - Manejo de excepciones mediante JwtEntryPoint.
- * - Política de sesión stateless.
- * - Rutas públicas (para autenticación) y protegidas.
- * - Integración del filtro JwtAuthenticationFilter en la cadena de filtros.
- */
 @Configuration
 @EnableMethodSecurity
 public class SecurityConfig {
@@ -53,24 +40,21 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .exceptionHandling(exception -> exception.authenticationEntryPoint(jwtEntryPoint))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/auth/**","/password/**","/actuator/health", "/actuator/info").permitAll()          // Endpoints públicos para login y registro.
-                        .requestMatchers("/admin/**").hasRole("ADMIN")      // Endpoints administrativos protegidos.
-                        // → Perfil propio de usuario: cualquier autenticado
-                        .requestMatchers(HttpMethod.GET,  "/users/me",    "/users/me/**")
-                        .authenticated()
-                        .requestMatchers(HttpMethod.PUT,  "/users/me",    "/users/me/**")
-                        .authenticated()
-
-                        // → Gestión completa de usuarios (listar, buscar, cambiar estado)
-                        //    solo ADMIN
-                        .requestMatchers("/users/**")
-                        .hasRole("ADMIN")
-                        .anyRequest().authenticated()                      // El resto de endpoints requieren autenticación.
-                );
-        http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                        // permitir preflights CORS
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers("/auth/**", "/password/**", "/actuator/health", "/actuator/info").permitAll()
+                        .requestMatchers("/admin/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/users/me", "/users/me/**").authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/users/me", "/users/me/**").authenticated()
+                        .requestMatchers("/users/**").hasRole("ADMIN")
+                        .anyRequest().authenticated()
+                )  // se quita ;
+        //se quite http
+       .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 
@@ -91,14 +75,19 @@ public class SecurityConfig {
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
-    @Bean
-    CorsConfigurationSource corsConfigurationSource(){
-        CorsConfiguration configuration = new CorsConfiguration();
 
-        configuration.setAllowedOrigins(List.of("http://localhost:4200"));
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        configuration.setAllowCredentials(true); // se agrego el 22 para cors
+        configuration.setAllowedOrigins(List.of(
+                "http://localhost:4200",
+                "http://localhost:5173"
+        ));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
         configuration.setAllowCredentials(true);
+
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
