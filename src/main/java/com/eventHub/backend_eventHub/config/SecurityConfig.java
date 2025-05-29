@@ -83,8 +83,9 @@ public class SecurityConfig {
         configuration.setAllowedOrigins(List.of(
                 "http://localhost:4200",
                 "http://localhost:5173",
-                "https://eventhub-wheat.vercel.app/",
-                "admin-eventhub.vercel.app"
+                "https://event-hub-rose-omega.vercel.app/",
+                "admin-eventhub.vercel.app",
+                "http://127.0.0.1:49183"
         ));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
