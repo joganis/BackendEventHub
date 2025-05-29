@@ -2,6 +2,9 @@ package com.eventHub.backend_eventHub.auth.service;
 
 
 import com.eventHub.backend_eventHub.auth.dto.NewUserDto;
+import com.eventHub.backend_eventHub.domain.entities.State;
+import com.eventHub.backend_eventHub.domain.enums.StateList;
+import com.eventHub.backend_eventHub.domain.repositories.StateRepository;
 import com.eventHub.backend_eventHub.utils.emails.dto.EmailDto;
 
 import com.eventHub.backend_eventHub.domain.entities.Role;
@@ -32,6 +35,7 @@ public class   AuthService {
     private final UserAuthService userAuthService;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final StateRepository stateRepository;
     private final JwtUtil jwtUtil;
     private final AuthenticationManagerBuilder authenticationManagerBuilder;
     private final EmailService emailService;
@@ -40,11 +44,13 @@ public class   AuthService {
     public AuthService(UserAuthService userAuthService,
                        RoleRepository roleRepository,
                        PasswordEncoder passwordEncoder,
+                       StateRepository stateRepository,
                        JwtUtil jwtUtil,
                        EmailService emailService,
                        AuthenticationManagerBuilder authenticationManagerBuilder) {
         this.userAuthService = userAuthService;
         this.roleRepository = roleRepository;
+        this.stateRepository = stateRepository;
         this.passwordEncoder = passwordEncoder;
         this.emailService = emailService;
         this.jwtUtil = jwtUtil;
@@ -79,17 +85,23 @@ public class   AuthService {
      * @param newUserDto Datos del nuevo usuario.
      */
     @Transactional
-    public void registerUser(NewUserDto newUserDto) {
+    public String registerUser(NewUserDto newUserDto) {
         if (userAuthService.existsByUserName(newUserDto.getUserName())) {
             throw new IllegalArgumentException("El nombre de usuario ya existe");
         }
         // Asignación automática del rol por defecto (ROLE_USER)
         Role roleUser = roleRepository.findByNombreRol(RoleList.ROLE_USUARIO)
                 .orElseThrow(() -> new RuntimeException("Rol no encontrado"));
+
+        State activeState = stateRepository
+                .findByNameState(StateList.Active)
+                .orElseThrow(() -> new RuntimeException("Estado por defecto no encontrado"));
         Users user = new Users(
                 newUserDto.getUserName(),
                 newUserDto.getEmail(),
-                passwordEncoder.encode(newUserDto.getPassword()),roleUser
+                passwordEncoder.encode(newUserDto.getPassword()),
+                roleUser,
+                activeState
         );
         userAuthService.save(user);
         // Enviar correo de confirmación
@@ -103,5 +115,9 @@ public class   AuthService {
         } catch (Exception e) {
             System.err.println("❌ Error al enviar el correo: " + e.getMessage());
         }
+        // 5. Reutilizar authenticate() para generar y retornar el JWT
+        return authenticate(newUserDto.getUserName(), newUserDto.getPassword());
+
     }
+
 }

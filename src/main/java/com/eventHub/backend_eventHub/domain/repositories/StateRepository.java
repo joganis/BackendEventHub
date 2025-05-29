@@ -16,7 +16,6 @@ import java.util.Optional;
 public interface StateRepository extends MongoRepository<State, String> {
     /**
      * Busca un estado por su nombre, sin importar mayúsculas/minúsculas.
-     *
      * @param nameState nombre del estado a buscar
      * @return Optional con el estado si existe, o vacío si no
      */
@@ -24,7 +23,6 @@ public interface StateRepository extends MongoRepository<State, String> {
 
     /**
      * Busca un estado por el valor del enum StateList
-     *
      * @param stateEnum valor del enum StateList a buscar
      * @return Optional con el estado si existe, o vacío si no
      */

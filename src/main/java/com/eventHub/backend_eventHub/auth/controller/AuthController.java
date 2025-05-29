@@ -13,9 +13,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
-
-
-
 /**
  * Controlador REST para autenticación y registro de usuarios.
  *
@@ -54,8 +51,8 @@ public class AuthController {
             return ResponseEntity.badRequest().body("Revise los campos");
         }
         try {
-            authService.registerUser(newUserDto);
-            return ResponseEntity.status(HttpStatus.CREATED).body("Registrado");
+           String jwt = authService.registerUser(newUserDto);
+            return ResponseEntity.status(HttpStatus.CREATED).body(jwt);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
