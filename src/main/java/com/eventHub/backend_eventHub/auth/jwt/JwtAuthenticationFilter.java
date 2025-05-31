@@ -28,11 +28,17 @@ import java.io.IOException;
 @NoArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-   @Autowired
+
     private JwtUtil jwtUtil;
 
-   @Autowired
+
     private UserAuthService userAuthService;
+
+    @Autowired
+    public JwtAuthenticationFilter(JwtUtil jwtUtil, UserAuthService userAuthService) {
+        this.jwtUtil = jwtUtil;
+        this.userAuthService = userAuthService;
+    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
