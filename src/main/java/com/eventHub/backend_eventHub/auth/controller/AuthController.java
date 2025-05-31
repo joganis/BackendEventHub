@@ -38,6 +38,7 @@ public class AuthController {
 
         AuthResponse response = new AuthResponse(jwt, "Login exitoso");
         return ResponseEntity.ok(response);
+
     }
 
     /**
