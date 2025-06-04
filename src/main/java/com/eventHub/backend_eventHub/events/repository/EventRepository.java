@@ -1,4 +1,7 @@
-// EventRepository actualizado
+// ================================
+// 3. EventRepository DEFINITIVO
+// ================================
+
 package com.eventHub.backend_eventHub.events.repository;
 
 import com.eventHub.backend_eventHub.events.entities.Event;
@@ -14,28 +17,45 @@ import java.util.List;
 @Repository
 public interface EventRepository extends MongoRepository<Event, String> {
 
-    // Buscar por estado (estos están bien)
+    // ========== BÚSQUEDAS POR ESTADO ==========
+
+    @Query("{'status.nameState': {$regex: ?0, $options: 'i'}}")
     List<Event> findByStatusNameStateIgnoreCase(String nameState);
+
+    @Query("{'status.nameState': {$regex: ?0, $options: 'i'}}")
     Page<Event> findByStatusNameStateIgnoreCase(String nameState, Pageable pageable);
 
-    // Buscar por creador (CORREGIDO)
+    // ========== BÚSQUEDAS POR CREADOR ==========
+
     @Query("{'creator.userName': ?0}")
     List<Event> findByCreatorUserName(String userName);
+
+    @Query("{'creator.$id': ?0}")
+    List<Event> findByCreatorId(String creatorId);
 
     @Query("{'creator.userName': ?0}")
     Page<Event> findByCreatorUserName(String userName, Pageable pageable);
 
-    // Buscar por categoría (estos están bien)
+    // ========== BÚSQUEDAS POR CATEGORÍA ==========
+
+    @Query("{'categoria.$id': ?0}")
     List<Event> findByCategoriaId(String categoriaId);
+
+    @Query("{'categoria.nombreCategoria': ?0}")
     List<Event> findByCategoriaNombreCategoria(String nombreCategoria);
 
-    // Eventos por fechas (estos están bien)
+    // ========== EVENTOS POR FECHAS ==========
+
+    @Query("{'start': {$gte: ?0}, 'end': {$lte: ?1}}")
     List<Event> findByStartGreaterThanEqualAndEndLessThanEqual(Instant startDate, Instant endDate);
+
+    @Query("{'start': {$gte: ?0}}")
     List<Event> findByStartGreaterThanEqual(Instant now);
+
+    @Query("{'end': {$lt: ?0}}")
     List<Event> findByEndLessThan(Instant now);
 
-    // ===== EVENTOS PÚBLICOS (SIN AUTENTICACIÓN) =====
-    // Estos métodos YA ESTÁN BIEN - usan @Query explícitas
+    // ========== EVENTOS PÚBLICOS (SIN AUTENTICACIÓN) ==========
 
     @Query("{'bloqueado': false, 'status.nameState': ?0, 'privacy': 'public'}")
     List<Event> findPublicEventsForUsers(String status);
@@ -49,6 +69,8 @@ public interface EventRepository extends MongoRepository<Event, String> {
     @Query("{'bloqueado': false, 'privacy': 'public', 'createdAt': {$exists: true}}")
     List<Event> findRecentPublicEvents(Pageable pageable);
 
+    // ========== BÚSQUEDA DE TEXTO EN EVENTOS PÚBLICOS ==========
+
     @Query("{'$and': [" +
             "{'bloqueado': false}, " +
             "{'privacy': 'public'}, " +
@@ -60,8 +82,7 @@ public interface EventRepository extends MongoRepository<Event, String> {
             "]}")
     List<Event> searchPublicEventsByText(String searchText);
 
-    // ===== EVENTOS PARA USUARIOS AUTENTICADOS =====
-    // Estos métodos YA ESTÁN BIEN
+    // ========== EVENTOS PARA USUARIOS AUTENTICADOS ==========
 
     @Query("{'bloqueado': false, 'status.nameState': ?0}")
     List<Event> findActiveEventsForAuthenticatedUsers(String status);
@@ -69,7 +90,6 @@ public interface EventRepository extends MongoRepository<Event, String> {
     @Query("{'bloqueado': false, 'status.nameState': ?0, 'start': {$gte: ?1}}")
     List<Event> findUpcomingEventsForAuthenticatedUsers(String status, Instant now);
 
-    // CORREGIDO: Eventos accesibles para usuario
     @Query("{'$and': [" +
             "{'bloqueado': false}, " +
             "{'status.nameState': ?1}, " +
@@ -81,10 +101,11 @@ public interface EventRepository extends MongoRepository<Event, String> {
             "]}")
     List<Event> findAccessibleEventsForUser(String username, String status);
 
-    // ===== MÉTODOS ESPECÍFICOS PARA PRIVACIDAD =====
+    // ========== EVENTOS POR PRIVACIDAD ==========
+
+    @Query("{'privacy': ?0, 'status.nameState': {$regex: ?1, $options: 'i'}}")
     List<Event> findByPrivacyAndStatusNameStateIgnoreCase(String privacy, String status);
 
-    // CORREGIDO: Verificar acceso a evento privado
     @Query("{'_id': ?0, '$or': [" +
             "{'privacy': 'public'}, " +
             "{'$and': [{'privacy': 'private'}, {'creator.userName': ?1}]}, " +
@@ -92,16 +113,35 @@ public interface EventRepository extends MongoRepository<Event, String> {
             "]}")
     Event findAccessibleEventById(String eventId, String username);
 
-    // ===== RESTO DE MÉTODOS ESTÁN BIEN =====
+    // ========== EVENTOS DESTACADOS ==========
+
+    @Query("{'destacado': true, 'status.nameState': {$regex: ?0, $options: 'i'}}")
     List<Event> findByDestacadoTrueAndStatusNameStateIgnoreCase(String status);
+
+    // ========== EVENTOS POR ESTADO DE BLOQUEO ==========
+
+    @Query("{'bloqueado': ?0}")
     List<Event> findByBloqueado(boolean bloqueado);
 
-    @Query("{'maxAttendees': {$gt: '$currentAttendees'}, 'permitirInscripciones': true, 'bloqueado': false}")
+    // ========== EVENTOS CON DISPONIBILIDAD ==========
+
+    @Query("{'$expr': {'$lt': ['$currentAttendees', '$maxAttendees']}, 'permitirInscripciones': true, 'bloqueado': false}")
     List<Event> findEventsWithAvailability();
 
-    List<Event> findTop10ByCreatedAtOrderByCreatedAtDesc();
+    // ========== EVENTOS RECIENTES ==========
+
+    @Query(value = "{}", sort = "{'createdAt': -1}")
+    List<Event> findTop10ByCreatedAtOrderByCreatedAtDesc(Pageable pageable);
+
+    // ========== OTROS FILTROS ==========
+
+    @Query("{'type': ?0}")
     List<Event> findByType(String type);
+
+    @Query("{'ticketType': ?0}")
     List<Event> findByTicketType(String ticketType);
+
+    // ========== BÚSQUEDA POR UBICACIÓN ==========
 
     @Query("{'location.address': {$regex: ?0, $options: 'i'}}")
     List<Event> findByLocationAddressContaining(String address);
@@ -109,19 +149,32 @@ public interface EventRepository extends MongoRepository<Event, String> {
     @Query("{'location.type': ?0}")
     List<Event> findByLocationType(String locationType);
 
-    @Query(value = "{'location': {$near: {$geometry: {type: 'Point', coordinates: [?0, ?1]}, $maxDistance: ?2}}}")
+    @Query("{'location': {$near: {$geometry: {type: 'Point', coordinates: [?0, ?1]}, $maxDistance: ?2}}}")
     List<Event> findEventsNear(Double longitude, Double latitude, Integer maxDistanceMeters);
 
+    // ========== EVENTOS POR CAPACIDAD ==========
+
+    @Query("{'maxAttendees': {$gt: ?0}}")
     List<Event> findByMaxAttendeesGreaterThan(Integer minAttendees);
+
+    // ========== BÚSQUEDA POR ORGANIZADOR ==========
 
     @Query("{'otherData.organizer': {$regex: ?0, $options: 'i'}}")
     List<Event> findByOrganizerContaining(String organizer);
 
+    // ========== BÚSQUEDA DE TEXTO GENERAL ==========
+
     @Query("{'$or': [{'title': {$regex: ?0, $options: 'i'}}, {'description': {$regex: ?0, $options: 'i'}}]}")
     List<Event> searchByTitleOrDescription(String searchText);
 
-    // ===== CONTADORES =====
+    // ========== CONTADORES ==========
+
+    @Query(value = "{'status.nameState': {$regex: ?0, $options: 'i'}}", count = true)
     long countByStatusNameStateIgnoreCase(String nameState);
+
+    @Query(value = "{'bloqueado': ?0}", count = true)
     long countByBloqueado(boolean bloqueado);
+
+    @Query(value = "{'privacy': ?0, 'status.nameState': {$regex: ?1, $options: 'i'}}", count = true)
     long countByPrivacyAndStatusNameStateIgnoreCase(String privacy, String status);
 }

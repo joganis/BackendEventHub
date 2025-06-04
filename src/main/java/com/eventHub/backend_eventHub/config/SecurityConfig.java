@@ -46,8 +46,11 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // permitir preflights CORS
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers("/auth/**", "/password/**", "/actuator/health", "/actuator/info").permitAll()
+                        .requestMatchers("/auth/register", "/auth/login").permitAll()
+                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                        .requestMatchers( "/password/**", "/actuator/health", "/actuator/info").permitAll()
                         .requestMatchers("/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/auth/check-auth").authenticated()
                         .requestMatchers(HttpMethod.GET, "/users/me", "/users/me/**").authenticated()
                         .requestMatchers(HttpMethod.PUT, "/users/me", "/users/me/**").authenticated()
                         .requestMatchers("/users/**").hasRole("ADMIN")

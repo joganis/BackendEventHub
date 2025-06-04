@@ -57,18 +57,42 @@ public class AuthController {
     /**
      * Endpoint para verificar el estado de autenticación.
      */
+//    @GetMapping("/check-auth")
+//    public ResponseEntity<AuthStatusResponse> checkAuth() {
+//        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+//
+//        if (authentication == null || !authentication.isAuthenticated() ||
+//                "anonymousUser".equals(authentication.getPrincipal())) {
+//            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+//                    .body(new AuthStatusResponse(false, null, "No autenticado"));
+//        }
+//
+//        return ResponseEntity.ok(
+//                new AuthStatusResponse(true, authentication.getName(), "Autenticado")
+//        );
+//    }
     @GetMapping("/check-auth")
     public ResponseEntity<AuthStatusResponse> checkAuth() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
+        log.debug("Check auth - Authentication: {}", authentication);
+        log.debug("Check auth - Principal: {}",
+                authentication != null ? authentication.getPrincipal() : "null");
+        log.debug("Check auth - Authenticated: {}",
+                authentication != null ? authentication.isAuthenticated() : "false");
+
         if (authentication == null || !authentication.isAuthenticated() ||
                 "anonymousUser".equals(authentication.getPrincipal())) {
+            log.info("❌ Check auth failed - No valid authentication");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(new AuthStatusResponse(false, null, "No autenticado"));
         }
 
+        String username = authentication.getName();
+        log.info("✅ Check auth successful for user: {}", username);
+
         return ResponseEntity.ok(
-                new AuthStatusResponse(true, authentication.getName(), "Autenticado")
+                new AuthStatusResponse(true, username, "Autenticado")
         );
     }
 

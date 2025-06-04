@@ -1,4 +1,8 @@
-// Nuevo: EventRoleRepository
+
+// ================================
+// 1. EventRoleRepository DEFINITIVO
+// ================================
+
 package com.eventHub.backend_eventHub.events.repository;
 
 import com.eventHub.backend_eventHub.events.entities.EventRole;
@@ -12,48 +16,67 @@ import java.util.Optional;
 @Repository
 public interface EventRoleRepository extends MongoRepository<EventRole, String> {
 
-    // ========== SOLUCIÓN 1: Usar @Query explícitas ==========
+    // ========== BÚSQUEDAS POR USUARIO ==========
 
-    // Roles de un usuario (CORREGIDO con @Query)
     @Query("{'usuario.$id': ?0, 'activo': true}")
     List<EventRole> findByUsuarioIdAndActivoTrue(String usuarioId);
 
-    // ALTERNATIVA: Usar el username con query explícita
     @Query("{'usuario.userName': ?0, 'activo': true}")
     List<EventRole> findByUsuarioUserNameAndActivoTrue(String userName);
 
+    // ========== BÚSQUEDAS POR EVENTO ==========
 
-
-    // Roles en un evento
     @Query("{'evento.$id': ?0, 'activo': true}")
     List<EventRole> findByEventoIdAndActivoTrue(String eventoId);
 
-    // Roles de un usuario en un evento específico (CORREGIDO)
+    // ========== BÚSQUEDAS COMBINADAS USUARIO + EVENTO ==========
+
+    @Query("{'usuario.$id': ?0, 'evento.$id': ?1, 'activo': true}")
+    List<EventRole> findByUsuarioIdAndEventoIdAndActivoTrue(String usuarioId, String eventoId);
+
     @Query("{'usuario.userName': ?0, 'evento.$id': ?1, 'activo': true}")
     List<EventRole> findByUsuarioUserNameAndEventoIdAndActivoTrue(String userName, String eventoId);
 
-    // Verificar rol específico (CORREGIDO)
-    @Query("{'usuario.userName': ?0, 'evento.$id': ?1, 'rol': ?2, 'activo': true}")
-    Optional<EventRole> findByUsuarioUserNameAndEventoIdAndRolAndActivoTrue(String userName, String eventoId, String rol);
+    // ========== BÚSQUEDAS POR ROL ==========
 
-    // Eventos donde el usuario es subcreador (CORREGIDO)
     @Query("{'usuario.userName': ?0, 'rol': ?1, 'activo': true}")
     List<EventRole> findByUsuarioUserNameAndRolAndActivoTrue(String userName, String rol);
 
-    // Invitaciones por email (este está bien)
+    @Query("{'usuario.$id': ?0, 'rol': ?1, 'activo': true}")
+    List<EventRole> findByUsuarioIdAndRolAndActivoTrue(String usuarioId, String rol);
+
+    // ========== BÚSQUEDAS ESPECÍFICAS CON ROL ==========
+
+    @Query("{'usuario.userName': ?0, 'evento.$id': ?1, 'rol': ?2, 'activo': true}")
+    Optional<EventRole> findByUsuarioUserNameAndEventoIdAndRolAndActivoTrue(String userName, String eventoId, String rol);
+
+    @Query("{'usuario.$id': ?0, 'evento.$id': ?1, 'rol': ?2, 'activo': true}")
+    Optional<EventRole> findByUsuarioIdAndEventoIdAndRolAndActivoTrue(String usuarioId, String eventoId, String rol);
+
+    // ========== INVITACIONES POR EMAIL ==========
+
+    @Query("{'emailInvitacion': ?0, 'activo': true}")
     List<EventRole> findByEmailInvitacionAndActivoTrue(String email);
-
-    // Método adicional para verificar si un usuario tiene algún rol en un evento (CORREGIDO)
-    @Query(value = "{'usuario.userName': ?0, 'evento.$id': ?1, 'activo': true}", exists = true)
-    boolean existsByUsuarioUserNameAndEventoIdAndActivoTrue(String userName, String eventoId);
-
-    // Método para obtener roles de un usuario en eventos específicos (CORREGIDO)
-    @Query("{'usuario.userName': ?0, 'evento.$id': {$in: ?1}, 'activo': true}")
-    List<EventRole> findByUsuarioUserNameAndEventoIdInAndActivoTrue(String userName, List<String> eventoIds);
 
     @Query("{'emailInvitacion': ?0, 'usuario': null, 'activo': true}")
     List<EventRole> findPendingInvitationsByEmail(String email);
 
     @Query("{'emailInvitacion': ?0}")
     List<EventRole> findAllInvitationsByEmail(String email);
+
+    // ========== VERIFICACIONES DE EXISTENCIA ==========
+
+    @Query(value = "{'usuario.userName': ?0, 'evento.$id': ?1, 'activo': true}", exists = true)
+    boolean existsByUsuarioUserNameAndEventoIdAndActivoTrue(String userName, String eventoId);
+
+    @Query(value = "{'usuario.$id': ?0, 'evento.$id': ?1, 'activo': true}", exists = true)
+    boolean existsByUsuarioIdAndEventoIdAndActivoTrue(String usuarioId, String eventoId);
+
+    // ========== BÚSQUEDAS EN MÚLTIPLES EVENTOS ==========
+
+    @Query("{'usuario.userName': ?0, 'evento.$id': {$in: ?1}, 'activo': true}")
+    List<EventRole> findByUsuarioUserNameAndEventoIdInAndActivoTrue(String userName, List<String> eventoIds);
+
+    @Query("{'usuario.$id': ?0, 'evento.$id': {$in: ?1}, 'activo': true}")
+    List<EventRole> findByUsuarioIdAndEventoIdInAndActivoTrue(String usuarioId, List<String> eventoIds);
 }

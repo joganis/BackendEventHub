@@ -27,21 +27,43 @@ public class InscriptionService {
      */
     @Transactional
     public Inscription registerToEvent(String username, InscriptionDto dto) {
+        // 1. Obtener usuario
         Users user = userRepo.findByUserName(username)
-                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado: " + username));
 
-        // Verificar si ya está inscrito
+        // 2. Verificar si ya está inscrito
         Optional<Inscription> existingInscription = inscriptionRepo
-                .findByUsuarioUserNameAndEventoIdAndEstado(username, dto.getEventoId(), "confirmada");
+                .findByUsuarioIdAndEventoIdAndEstado(user.getId(), dto.getEventoId(), "confirmada");
 
-        if (existingInscription.isPresent()) {
+        if (existingInscription.isPresent() &&
+                "evento_principal".equals(existingInscription.get().getTipoInscripcion())) {
             throw new IllegalArgumentException("Ya estás inscrito en este evento");
         }
 
+        // 3. Obtener y validar evento
         Event event = eventRepo.findById(dto.getEventoId())
-                .orElseThrow(() -> new IllegalArgumentException("Evento no encontrado"));
+                .orElseThrow(() -> new IllegalArgumentException("Evento no encontrado con ID: " + dto.getEventoId()));
 
-        // Verificar disponibilidad
+        validateEventForRegistration(event); // Usar método auxiliar
+
+        // 4. Crear inscripción
+        Inscription inscription = Inscription.builder()
+                .usuario(user)
+                .evento(event)
+                .fechaInscripcion(Instant.now())
+                .estado("confirmada")
+                .tipoInscripcion("evento_principal")
+                .build();
+
+        // 5. Guardar y actualizar contador
+        inscription = inscriptionRepo.save(inscription);
+        event.setCurrentAttendees(event.getCurrentAttendees() + 1);
+        eventRepo.save(event);
+
+        return inscription;
+    }
+
+    private void validateEventForRegistration(Event event) {
         if (event.getCurrentAttendees() >= event.getMaxAttendees()) {
             throw new IllegalArgumentException("Evento lleno - no hay cupos disponibles");
         }
@@ -54,38 +76,18 @@ public class InscriptionService {
             throw new IllegalArgumentException("Este evento no está disponible");
         }
 
-        // Verificar que el evento esté activo
-        if (!"Active".equals(event.getStatus().getNameState().name())) {
+        if (event.getStatus() == null || !"Active".equals(event.getStatus().getNameState().name())) {
             throw new IllegalArgumentException("Solo puedes inscribirte a eventos activos");
         }
 
-        // Verificar fecha límite
         if (event.getFechaLimiteInscripcion() != null &&
                 Instant.now().isAfter(event.getFechaLimiteInscripcion())) {
             throw new IllegalArgumentException("La fecha límite de inscripción ha expirado");
         }
 
-        // Verificar que el evento no haya comenzado
         if (Instant.now().isAfter(event.getStart())) {
             throw new IllegalArgumentException("No puedes inscribirte a un evento que ya ha comenzado");
         }
-
-        // Crear inscripción
-        Inscription inscription = Inscription.builder()
-                .usuario(user)
-                .evento(event)
-                .fechaInscripcion(Instant.now())
-                .estado("confirmada")
-                .tipoInscripcion("evento_principal")
-                .build();
-
-        inscription = inscriptionRepo.save(inscription);
-
-        // Actualizar contador de asistentes
-        event.setCurrentAttendees(event.getCurrentAttendees() + 1);
-        eventRepo.save(event);
-
-        return inscription;
     }
 
     /**

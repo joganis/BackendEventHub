@@ -43,11 +43,25 @@ public class InscriptionController {
     public ResponseEntity<Inscription> registerToEvent(Principal principal,
                                                        @Valid @RequestBody InscriptionDto dto) {
         try {
+            // Usar método mejorado del servicio
             Inscription inscription = inscriptionService.registerToEvent(principal.getName(), dto);
             return ResponseEntity.status(HttpStatus.CREATED).body(inscription);
         } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+            // Mensajes de error más específicos
+            if (e.getMessage().contains("no encontrado")) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
+            } else if (e.getMessage().contains("lleno") ||
+                    e.getMessage().contains("cerradas") ||
+                    e.getMessage().contains("ya estás inscrito")) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage());
+            } else {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+            }
         } catch (Exception e) {
+            // Log del error para debugging
+            System.err.println("Error inesperado en inscripción: " + e.getMessage());
+            e.printStackTrace();
+
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
                     "Error al inscribirse al evento: " + e.getMessage());
         }

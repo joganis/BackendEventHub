@@ -88,19 +88,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private void processJwtToken(String jwt, HttpServletRequest request) {
         try {
             String userName = jwtUtil.extractUserName(jwt);
+            log.debug("🔍 Processing JWT for user: {}", userName);
 
             if (StringUtils.hasText(userName)) {
                 UserDetails userDetails = loadUserDetails(userName);
 
                 if (userDetails != null && jwtUtil.validateToken(jwt, userDetails)) {
                     setAuthenticationContext(userDetails, request);
-                    log.debug("Autenticación JWT exitosa para usuario: {}", userName);
+                    log.info("✅ Autenticación JWT exitosa para usuario: {}", userName);
+                } else {
+                    log.warn("❌ Token JWT inválido para usuario: {}", userName);
                 }
             }
         } catch (UsernameNotFoundException e) {
-            log.warn("Usuario no encontrado en token JWT: {}", e.getMessage());
+            log.warn("❌ Usuario no encontrado en token JWT: {}", e.getMessage());
         } catch (Exception e) {
-            log.error("Error procesando token JWT: {}", e.getMessage());
+            log.error("❌ Error procesando token JWT: {}", e.getMessage());
         }
     }
 
@@ -148,7 +151,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String path = request.getServletPath();
 
         // Excluir rutas públicas del procesamiento JWT para mejorar rendimiento
-        return path.startsWith("/auth/") ||
+        return path.equals("/auth/register") ||
+                path.equals("/auth/login") ||           // ← ESPECÍFICO, NO /auth/check-auth
                 path.startsWith("/password/") ||
                 path.startsWith("/actuator/") ||
                 path.startsWith("/swagger-ui/") ||
