@@ -1,4 +1,4 @@
-// EventDto actualizado
+// Nuevo: SubEventDto
 package com.eventHub.backend_eventHub.events.dto;
 
 import jakarta.validation.Valid;
@@ -6,14 +6,17 @@ import jakarta.validation.constraints.*;
 import lombok.Data;
 
 import java.time.Instant;
-import java.util.*;
+import java.util.List;
 
 @Data
-public class EventDto {
+public class SubEventDto {
     @NotBlank
     private String title;
 
     private String description;
+
+    @NotBlank
+    private String eventoPrincipalId;
 
     @Valid @NotNull
     private LocationDto location;
@@ -39,20 +42,8 @@ public class EventDto {
     @Min(1)
     private Integer maxAttendees;
 
-    @NotBlank
-    private String categoriaId; // ID de la categoría seleccionada
-
     private List<MediaDto> mainImages;
-    private List<MediaDto> galleryImages;
-    private List<MediaDto> videos;
-    private List<MediaDto> documents;
 
     @Valid
     private OtherDataDto otherData;
-
-    private boolean destacado = false;
-    private boolean permitirInscripciones = true;
-    private Instant fechaLimiteInscripcion;
-
-    private List<@NotBlank String> tags;
 }

@@ -1,238 +1,410 @@
 
+// EventService actualizado
 package com.eventHub.backend_eventHub.events.service;
 
 import com.eventHub.backend_eventHub.events.dto.*;
-
 import com.eventHub.backend_eventHub.events.entities.*;
-import com.eventHub.backend_eventHub.events.repository.EventRepository;
-import com.eventHub.backend_eventHub.domain.entities.State;
+import com.eventHub.backend_eventHub.events.repository.*;
+import com.eventHub.backend_eventHub.domain.entities.*;
+import com.eventHub.backend_eventHub.domain.repositories.*;
 import com.eventHub.backend_eventHub.users.repository.UserRepository;
-import com.eventHub.backend_eventHub.domain.entities.Users;
-import com.eventHub.backend_eventHub.domain.repositories.StateRepository;
 import com.eventHub.backend_eventHub.domain.enums.StateList;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
+
 
 @Service
 public class EventService {
     @Autowired private EventRepository eventRepo;
     @Autowired private UserRepository userRepo;
     @Autowired private StateRepository stateRepo;
+    @Autowired private CategoryRepository categoryRepo;
+    @Autowired private InscriptionRepository inscriptionRepo;
+    @Autowired private EventRoleRepository eventRoleRepo;
+    @Autowired private SubEventRepository subEventRepo;
+    @Autowired private InvitationService invitationService;
 
     /**
-     * Lista todos los eventos o filtra por estado
-     * @param status Estado por el cual filtrar (opcional)
-     * @return Lista de eventos
+     * Lista eventos públicos y no bloqueados para usuarios NO AUTENTICADOS
      */
     @Transactional(readOnly = true)
-    public List<Event> listAll(String status) {
-        return (status == null)
-                ? eventRepo.findAll()
-                : eventRepo.findByStatusNameStateIgnoreCase(status);
+    public List<EventSummaryDto> listPublicEvents(EventFilterDto filter) {
+        List<Event> events;
+
+        if (filter == null || isFilterEmpty(filter)) {
+            events = eventRepo.findPublicEventsForUsers("Active");
+        } else {
+            events = applyPublicFilters(filter);
+        }
+
+        return events.stream()
+                .map(this::mapToSummaryDto)
+                .collect(Collectors.toList());
     }
 
     /**
-     * Obtiene un evento por su ID
-     * @param id ID del evento
-     * @return Evento encontrado
-     * @throws IllegalArgumentException si no existe el evento
+     * Lista eventos accesibles para usuario AUTENTICADO (públicos + privados donde tiene acceso)
      */
     @Transactional(readOnly = true)
-    public Event getById(String id) {
-        return eventRepo.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Evento no encontrado: " + id));
+    public List<EventSummaryDto> listAccessibleEvents(String username, EventFilterDto filter) {
+        List<Event> events;
+
+        if (filter == null || isFilterEmpty(filter)) {
+            events = eventRepo.findAccessibleEventsForUser(username, "Active");
+        } else {
+            events = applyAuthenticatedFilters(username, filter);
+        }
+
+        return events.stream()
+                .map(this::mapToSummaryDto)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Lista eventos destacados PÚBLICOS para promoción
+     */
+    @Transactional(readOnly = true)
+    public List<EventSummaryDto> listFeaturedEvents() {
+        List<Event> events = eventRepo.findFeaturedPublicEvents("Active");
+        return events.stream()
+                .map(this::mapToSummaryDto)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Lista próximos eventos PÚBLICOS
+     */
+    @Transactional(readOnly = true)
+    public List<EventSummaryDto> listUpcomingEvents() {
+        List<Event> events = eventRepo.findUpcomingPublicEvents("Active", Instant.now());
+        return events.stream()
+                .map(this::mapToSummaryDto)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Lista eventos recientes PÚBLICOS
+     */
+    @Transactional(readOnly = true)
+    public List<EventSummaryDto> listRecentEvents() {
+        Pageable pageable = PageRequest.of(0, 10, Sort.by(Sort.Direction.DESC, "createdAt"));
+        List<Event> events = eventRepo.findRecentPublicEvents(pageable);
+        return events.stream()
+                .map(this::mapToSummaryDto)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Obtiene detalle completo de un evento (respeta privacidad)
+     */
+    @Transactional(readOnly = true)
+    public Event getEventDetails(String id) {
+        return getEventDetails(id, null); // Para usuarios no autenticados
+    }
+
+    /**
+     * Obtiene detalle completo de un evento para usuario autenticado
+     */
+    @Transactional(readOnly = true)
+    public Event getEventDetails(String id, String username) {
+        Event event;
+
+        if (username != null) {
+            // Usuario autenticado - verificar acceso a eventos privados
+            event = eventRepo.findAccessibleEventById(id, username);
+        } else {
+            // Usuario no autenticado - solo eventos públicos
+            event = eventRepo.findById(id)
+                    .filter(e -> "public".equals(e.getPrivacy()) && !e.isBloqueado())
+                    .orElse(null);
+        }
+
+        if (event == null) {
+            throw new IllegalArgumentException("Evento no encontrado o no tienes acceso a él");
+        }
+
+        // Cargar subeventos
+        List<SubEvent> subEvents = subEventRepo.findByEventoPrincipalId(id);
+
+        return event;
     }
 
     /**
      * Crea un nuevo evento
-     * @param username Usuario creador
-     * @param dto Datos del evento
-     * @return Evento creado
      */
     @Transactional
-    public Event create(String username, EventDto dto) {
-        // Verificar usuario
+    public Event createEvent(String username, EventDto dto) {
         Users creator = userRepo.findByUserName(username)
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no existe: " + username));
 
-        // Obtener estado "Active"
         State activeState = stateRepo.findByNameState(StateList.Active)
                 .orElseThrow(() -> new IllegalArgumentException("Estado Active no encontrado"));
 
-        // Construir el evento
-        Event ev = mapDtoToEvent(dto, creator, activeState);
+        Category category = categoryRepo.findById(dto.getCategoriaId())
+                .orElseThrow(() -> new IllegalArgumentException("Categoría no encontrada"));
 
-        // Inicializar el historial
-        ev.setHistory(new ArrayList<>());
-        HistoryRecord initialRecord = HistoryRecord.builder()
-                .field("creation")
-                .oldValue(null)
-                .newValue("Event created")
-                .changedAt(Instant.now())
+        Event event = mapDtoToEvent(dto, creator, activeState, category);
+        event.setCreatedAt(Instant.now());
+        event.setUpdatedAt(Instant.now());
+
+        // Inicializar historial
+        event.setHistory(new ArrayList<>());
+        addHistoryRecord(event.getHistory(), "creation", null, "Event created");
+
+        event = eventRepo.save(event);
+
+        // Crear rol de CREADOR
+        EventRole creatorRole = EventRole.builder()
+                .usuario(creator)
+                .evento(event)
+                .rol("CREADOR")
+                .fechaAsignacion(Instant.now())
+                .activo(true)
                 .build();
-        ev.getHistory().add(initialRecord);
+        eventRoleRepo.save(creatorRole);
 
-        // Guardar y devolver
-        return eventRepo.save(ev);
+        return event;
     }
 
     /**
-     * Actualiza un evento existente
-     * @param id ID del evento
-     * @param dto Datos a actualizar
-     * @return Evento actualizado
-     */
-    @Transactional
-    public Event update(String id, UpdateEventDto dto) {
-        Event ev = getById(id);
-        List<HistoryRecord> changes = new ArrayList<>();
-
-        // Actualizar datos básicos
-        if (dto.getTitle() != null && !dto.getTitle().equals(ev.getTitle())) {
-            String oldValue = ev.getTitle();
-            ev.setTitle(dto.getTitle());
-            addHistoryRecord(changes, "title", oldValue, dto.getTitle());
-        }
-
-        if (dto.getDescription() != null && !dto.getDescription().equals(ev.getDescription())) {
-            String oldValue = ev.getDescription();
-            ev.setDescription(dto.getDescription());
-            addHistoryRecord(changes, "description", oldValue, dto.getDescription());
-        }
-
-        if (dto.getStart() != null && !dto.getStart().equals(ev.getStart())) {
-            String oldValue = ev.getStart().toString();
-            ev.setStart(dto.getStart());
-            addHistoryRecord(changes, "start", oldValue, dto.getStart().toString());
-        }
-
-        if (dto.getEnd() != null && !dto.getEnd().equals(ev.getEnd())) {
-            String oldValue = ev.getEnd().toString();
-            ev.setEnd(dto.getEnd());
-            addHistoryRecord(changes, "end", oldValue, dto.getEnd().toString());
-        }
-
-        if (dto.getPrice() != null) {
-            String oldValue = ev.getPrice() != null ?
-                    ev.getPrice().getAmount() + " " + ev.getPrice().getCurrency() : "none";
-            ev.setPrice(new Price(dto.getPrice().getAmount(), dto.getPrice().getCurrency()));
-            addHistoryRecord(changes, "price", oldValue,
-                    dto.getPrice().getAmount() + " " + dto.getPrice().getCurrency());
-        }
-
-        if (dto.getMaxAttendees() != null && !dto.getMaxAttendees().equals(ev.getMaxAttendees())) {
-            String oldValue = ev.getMaxAttendees() != null ? ev.getMaxAttendees().toString() : "none";
-            ev.setMaxAttendees(dto.getMaxAttendees());
-            addHistoryRecord(changes, "maxAttendees", oldValue, dto.getMaxAttendees().toString());
-        }
-
-        if (dto.getCategories() != null) {
-            String oldValue = ev.getCategories() != null ? String.join(",", ev.getCategories()) : "none";
-            ev.setCategories(dto.getCategories());
-            addHistoryRecord(changes, "categories", oldValue, String.join(",", dto.getCategories()));
-        }
-
-        // Actualizar medios y contenido multimedia
-        updateMediaCollection(ev, dto, changes);
-
-        // Actualizar otros datos
-        if (dto.getOtherData() != null) {
-            OtherData oldData = ev.getOtherData();
-            OtherData newData = new OtherData(
-                    dto.getOtherData().getOrganizer(),
-                    dto.getOtherData().getContact(),
-                    dto.getOtherData().getNotes());
-
-            ev.setOtherData(newData);
-
-            if (!newData.getOrganizer().equals(oldData.getOrganizer())) {
-                addHistoryRecord(changes, "organizer", oldData.getOrganizer(), newData.getOrganizer());
-            }
-
-            if (!newData.getContact().equals(oldData.getContact())) {
-                addHistoryRecord(changes, "contact", oldData.getContact(), newData.getContact());
-            }
-
-            if (!newData.getNotes().equals(oldData.getNotes())) {
-                addHistoryRecord(changes, "notes", oldData.getNotes(), newData.getNotes());
-            }
-        }
-
-        // Añadir cambios al historial si hay alguno
-        if (!changes.isEmpty()) {
-            if (ev.getHistory() == null) {
-                ev.setHistory(new ArrayList<>());
-            }
-            ev.getHistory().addAll(changes);
-        }
-
-        return eventRepo.save(ev);
-    }
-
-    /**
-     * Cambia el estado de un evento
-     * @param id ID del evento
-     * @param statusName Nuevo estado
-     * @return Evento actualizado
-     */
-    @Transactional
-    public Event changeStatus(String id, String statusName) {
-        Event ev = getById(id);
-
-        try {
-            StateList stateEnum = StateList.valueOf(statusName);
-            State newState = stateRepo.findByNameState(stateEnum)
-                    .orElseThrow(() -> new IllegalArgumentException("Estado no encontrado en la base de datos: " + statusName));
-
-            // Registrar cambio en historial
-            String oldStatus = ev.getStatus() != null ? ev.getStatus().getNameState().name() : "null";
-
-            ev.setStatus(newState);
-
-            // Añadir entrada al historial
-            if (ev.getHistory() == null) {
-                ev.setHistory(new ArrayList<>());
-            }
-
-            HistoryRecord record = HistoryRecord.builder()
-                    .field("status")
-                    .oldValue(oldStatus)
-                    .newValue(statusName)
-                    .changedAt(Instant.now())
-                    .build();
-
-            ev.getHistory().add(record);
-
-            return eventRepo.save(ev);
-        } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Estado inválido: " + statusName +
-                    ". Valores permitidos: " + java.util.Arrays.toString(StateList.values()));
-        }
-    }
-
-    /**
-     * Comprueba si un usuario es el creador o administrador de un evento
-     * @param eventId ID del evento
-     * @param username Nombre de usuario
-     * @return true si es creador o admin
+     * Lista eventos creados por un usuario
      */
     @Transactional(readOnly = true)
-    public boolean isCreatorOrAdmin(String eventId, String username) {
-        Event event = getById(eventId);
-        return event.getCreator().getUserName().equals(username);
+    public List<Event> listMyCreatedEvents(String username) {
+        return eventRepo.findByCreatorUserName(username);
     }
 
     /**
-     * Mapea un DTO a una entidad Event
+     * Lista eventos donde el usuario es subcreador
      */
-    private Event mapDtoToEvent(EventDto dto, Users creator, State status) {
+    @Transactional(readOnly = true)
+    public List<Event> listEventsAsSubcreator(String username) {
+        List<EventRole> roles = eventRoleRepo.findByUsuarioUserNameAndRolAndActivoTrue(username, "SUBCREADOR");
+        return roles.stream()
+                .map(role -> role.getEvento())
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Actualiza un evento (solo creador o subcreador)
+     */
+    @Transactional
+    public Event updateEvent(String eventId, String username, UpdateEventDto dto) {
+        Event event = getById(eventId);
+
+        if (!canUserEditEvent(username, eventId)) {
+            throw new IllegalArgumentException("No tienes permisos para editar este evento");
+        }
+
+        List<HistoryRecord> changes = new ArrayList<>();
+
+        // Aplicar cambios y registrar historial
+        updateEventFields(event, dto, changes);
+
+        if (!changes.isEmpty()) {
+            if (event.getHistory() == null) {
+                event.setHistory(new ArrayList<>());
+            }
+            event.getHistory().addAll(changes);
+        }
+
+        event.setUpdatedAt(Instant.now());
+        return eventRepo.save(event);
+    }
+
+    /**
+     * Elimina un evento (solo creador)
+     */
+    @Transactional
+    public void deleteEvent(String eventId, String username) {
+        Event event = getById(eventId);
+
+        if (!isEventCreator(username, eventId)) {
+            throw new IllegalArgumentException("Solo el creador puede eliminar este evento");
+        }
+
+        // Cancelar inscripciones activas
+        List<Inscription> inscriptions = inscriptionRepo.findByEventoIdAndEstado(eventId, "confirmada");
+        inscriptions.forEach(inscription -> {
+            inscription.setEstado("cancelada");
+            inscriptionRepo.save(inscription);
+        });
+
+        // Eliminar subeventos
+        List<SubEvent> subEvents = subEventRepo.findByEventoPrincipalId(eventId);
+        subEventRepo.deleteAll(subEvents);
+
+        // Desactivar roles
+        List<EventRole> roles = eventRoleRepo.findByEventoIdAndActivoTrue(eventId);
+        roles.forEach(role -> {
+            role.setActivo(false);
+            eventRoleRepo.save(role);
+        });
+
+        eventRepo.delete(event);
+    }
+
+    /**
+     * Invita a un subcreador
+     */
+    @Transactional
+    public EventRole inviteSubcreator(String eventId, String creatorUsername, EventRoleDto dto) {
+        if (!isEventCreator(creatorUsername, eventId)) {
+            throw new IllegalArgumentException("Solo el creador puede invitar subcreadores");
+        }
+
+        Event event = getById(eventId);
+
+        // Verificar si ya existe una invitación activa
+        if (eventRoleRepo.findByEmailInvitacionAndActivoTrue(dto.getEmailInvitacion()).size() > 0) {
+            throw new IllegalArgumentException("Ya existe una invitación activa para este email");
+        }
+
+        EventRole role = EventRole.builder()
+                .evento(event)
+                .emailInvitacion(dto.getEmailInvitacion())
+                .rol("SUBCREADOR")
+                .fechaAsignacion(Instant.now())
+                .activo(true)
+                .build();
+        // GUARDAR PRIMERO
+        EventRole savedRole = eventRoleRepo.save(role);
+
+        // DESPUÉS ENVIAR EMAIL (sin afectar el retorno)
+        try {
+            invitationService.sendInvitationEmail(savedRole);
+        } catch (Exception e) {
+            System.err.println("Error al enviar email de invitación: " + e.getMessage());
+            // No lanzamos excepción para que la invitación se complete exitosamente
+        }
+
+        // RETORNAR EL MISMO TIPO QUE ANTES
+        return savedRole; // EventRole (no boolean)
+    }
+
+    /**
+     * Acepta invitación como subcreador
+     */
+    @Transactional
+    public EventRole acceptSubcreatorInvitation(String username, String invitationId) {
+        Users user = userRepo.findByUserName(username)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
+
+        EventRole role = eventRoleRepo.findById(invitationId)
+                .orElseThrow(() -> new IllegalArgumentException("Invitación no encontrada"));
+
+        if (!role.isActivo()) {
+            throw new IllegalArgumentException("Invitación ya no está activa");
+        }
+
+        if (role.getUsuario() != null) {
+            throw new IllegalArgumentException("Invitación ya fue aceptada");
+        }
+
+        // Verificar que el email del usuario coincida con la invitación
+        if (!user.getEmail().equals(role.getEmailInvitacion())) {
+            throw new IllegalArgumentException("El email no coincide con la invitación");
+        }
+
+        role.setUsuario(user);
+        return eventRoleRepo.save(role);
+    }
+
+    // ================ MÉTODOS DE UTILIDAD ================
+
+    private Event getById(String id) {
+        return eventRepo.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Evento no encontrado: " + id));
+    }
+
+    private boolean isEventCreator(String username, String eventId) {
+        return eventRoleRepo.findByUsuarioUserNameAndEventoIdAndRolAndActivoTrue(username, eventId, "CREADOR")
+                .isPresent();
+    }
+
+    private boolean canUserEditEvent(String username, String eventId) {
+        return eventRoleRepo.findByUsuarioUserNameAndEventoIdAndActivoTrue(username, eventId)
+                .stream()
+                .anyMatch(role -> role.getRol().equals("CREADOR") || role.getRol().equals("SUBCREADOR"));
+    }
+
+    private boolean isFilterEmpty(EventFilterDto filter) {
+        return filter.getStatus() == null && filter.getCategoriaId() == null &&
+                filter.getSearchText() == null && filter.getStartDate() == null;
+    }
+
+    private List<Event> applyPublicFilters(EventFilterDto filter) {
+        // Implementar lógica de filtros para eventos públicos
+        if (filter.getSearchText() != null) {
+            return eventRepo.searchPublicEventsByText(filter.getSearchText());
+        }
+        if (filter.getCategoriaId() != null) {
+            return eventRepo.findByCategoriaId(filter.getCategoriaId())
+                    .stream()
+                    .filter(e -> "public".equals(e.getPrivacy()) && !e.isBloqueado())
+                    .collect(Collectors.toList());
+        }
+        return eventRepo.findPublicEventsForUsers("Active");
+    }
+
+    private List<Event> applyAuthenticatedFilters(String username, EventFilterDto filter) {
+        // Implementar lógica de filtros para usuarios autenticados
+        if (filter.getSearchText() != null) {
+            // Para usuarios autenticados, incluir búsqueda en eventos privados accesibles
+            return eventRepo.findAccessibleEventsForUser(username, "Active")
+                    .stream()
+                    .filter(event -> event.getTitle().toLowerCase().contains(filter.getSearchText().toLowerCase()) ||
+                            (event.getDescription() != null && event.getDescription().toLowerCase().contains(filter.getSearchText().toLowerCase())))
+                    .collect(Collectors.toList());
+        }
+        if (filter.getCategoriaId() != null) {
+            return eventRepo.findAccessibleEventsForUser(username, "Active")
+                    .stream()
+                    .filter(event -> event.getCategoria() != null &&
+                            event.getCategoria().getId().equals(filter.getCategoriaId()))
+                    .collect(Collectors.toList());
+        }
+        return eventRepo.findAccessibleEventsForUser(username, "Active");
+    }
+
+    private List<Event> applyFilters(EventFilterDto filter) {
+        // Método de compatibilidad - delegar a filtros públicos
+        return applyPublicFilters(filter);
+    }
+
+    private EventSummaryDto mapToSummaryDto(Event event) {
+        EventSummaryDto dto = new EventSummaryDto();
+        dto.setId(event.getId());
+        dto.setTitle(event.getTitle());
+        dto.setDescription(event.getDescription());
+        dto.setUbicacion(event.getLocation() != null ? event.getLocation().getAddress() : "");
+        dto.setFechaInicio(event.getStart().toString());
+        dto.setFechaFin(event.getEnd().toString());
+        dto.setCategoria(event.getCategoria() != null ? event.getCategoria().getNombreCategoria() : "");
+        dto.setTipo(event.getType());
+        dto.setEsPago("paid".equals(event.getTicketType()));
+        dto.setPrecio(event.getPrice() != null ? event.getPrice().getAmount() : 0.0);
+        dto.setMoneda(event.getPrice() != null ? event.getPrice().getCurrency() : "");
+        dto.setMaxAttendees(event.getMaxAttendees());
+        dto.setCurrentAttendees(event.getCurrentAttendees());
+        dto.setDisponible(event.getCurrentAttendees() < event.getMaxAttendees() && event.isPermitirInscripciones());
+        dto.setImagenPrincipal(event.getMainImages() != null && !event.getMainImages().isEmpty() ?
+                event.getMainImages().get(0).getUrl() : "");
+        dto.setDestacado(event.isDestacado());
+        return dto;
+    }
+
+    private Event mapDtoToEvent(EventDto dto, Users creator, State status, Category category) {
         return Event.builder()
                 .title(dto.getTitle())
                 .description(dto.getDescription())
@@ -249,7 +421,8 @@ public class EventService {
                 .price(dto.getPrice() != null ?
                         new Price(dto.getPrice().getAmount(), dto.getPrice().getCurrency()) : null)
                 .maxAttendees(dto.getMaxAttendees())
-                .categories(dto.getCategories())
+                .currentAttendees(0)
+                .categoria(category)
                 .mainImages(mapMediaDtosToMedia(dto.getMainImages()))
                 .galleryImages(mapMediaDtosToMedia(dto.getGalleryImages()))
                 .videos(mapMediaDtosToMedia(dto.getVideos()))
@@ -260,15 +433,16 @@ public class EventService {
                                 dto.getOtherData().getContact(),
                                 dto.getOtherData().getNotes()) :
                         new OtherData(null, null, null))
-                .subeventIds(dto.getSubeventIds())
                 .creator(creator)
                 .status(status)
+                .destacado(dto.isDestacado())
+                .permitirInscripciones(dto.isPermitirInscripciones())
+                .fechaLimiteInscripcion(dto.getFechaLimiteInscripcion())
+                .tags(dto.getTags())
+                .bloqueado(false)
                 .build();
     }
 
-    /**
-     * Convierte una lista de MediaDto a Media
-     */
     private List<Media> mapMediaDtosToMedia(List<MediaDto> dtos) {
         if (dtos == null) return new ArrayList<>();
         return dtos.stream()
@@ -276,11 +450,8 @@ public class EventService {
                 .collect(Collectors.toList());
     }
 
-    /**
-     * Añade un registro al historial
-     */
-    private void addHistoryRecord(List<HistoryRecord> records, String field, String oldValue, String newValue) {
-        records.add(HistoryRecord.builder()
+    private void addHistoryRecord(List<HistoryRecord> history, String field, String oldValue, String newValue) {
+        history.add(HistoryRecord.builder()
                 .field(field)
                 .oldValue(oldValue)
                 .newValue(newValue)
@@ -288,32 +459,77 @@ public class EventService {
                 .build());
     }
 
-    /**
-     * Actualiza colecciones de media
-     */
-    private void updateMediaCollection(Event ev, UpdateEventDto dto, List<HistoryRecord> changes) {
+    private void updateEventFields(Event event, UpdateEventDto dto, List<HistoryRecord> changes) {
+        if (dto.getTitle() != null && !dto.getTitle().equals(event.getTitle())) {
+            addHistoryRecord(changes, "title", event.getTitle(), dto.getTitle());
+            event.setTitle(dto.getTitle());
+        }
+
+        if (dto.getDescription() != null && !dto.getDescription().equals(event.getDescription())) {
+            addHistoryRecord(changes, "description", event.getDescription(), dto.getDescription());
+            event.setDescription(dto.getDescription());
+        }
+
+        if (dto.getStart() != null && !dto.getStart().equals(event.getStart())) {
+            addHistoryRecord(changes, "start", event.getStart().toString(), dto.getStart().toString());
+            event.setStart(dto.getStart());
+        }
+
+        if (dto.getEnd() != null && !dto.getEnd().equals(event.getEnd())) {
+            addHistoryRecord(changes, "end", event.getEnd().toString(), dto.getEnd().toString());
+            event.setEnd(dto.getEnd());
+        }
+
+        if (dto.getPrice() != null) {
+            String oldValue = event.getPrice() != null ?
+                    event.getPrice().getAmount() + " " + event.getPrice().getCurrency() : "none";
+            event.setPrice(new Price(dto.getPrice().getAmount(), dto.getPrice().getCurrency()));
+            addHistoryRecord(changes, "price", oldValue,
+                    dto.getPrice().getAmount() + " " + dto.getPrice().getCurrency());
+        }
+
+        if (dto.getMaxAttendees() != null && !dto.getMaxAttendees().equals(event.getMaxAttendees())) {
+            addHistoryRecord(changes, "maxAttendees",
+                    event.getMaxAttendees() != null ? event.getMaxAttendees().toString() : "none",
+                    dto.getMaxAttendees().toString());
+            event.setMaxAttendees(dto.getMaxAttendees());
+        }
+
+        // Actualizar multimedia
         if (dto.getMainImages() != null) {
-            String oldValue = "Main images updated";
-            ev.setMainImages(mapMediaDtosToMedia(dto.getMainImages()));
-            addHistoryRecord(changes, "mainImages", oldValue, "New images: " + dto.getMainImages().size());
+            event.setMainImages(mapMediaDtosToMedia(dto.getMainImages()));
+            addHistoryRecord(changes, "mainImages", "Updated", "New images: " + dto.getMainImages().size());
         }
 
         if (dto.getGalleryImages() != null) {
-            String oldValue = "Gallery images updated";
-            ev.setGalleryImages(mapMediaDtosToMedia(dto.getGalleryImages()));
-            addHistoryRecord(changes, "galleryImages", oldValue, "New images: " + dto.getGalleryImages().size());
+            event.setGalleryImages(mapMediaDtosToMedia(dto.getGalleryImages()));
+            addHistoryRecord(changes, "galleryImages", "Updated", "New images: " + dto.getGalleryImages().size());
         }
 
         if (dto.getVideos() != null) {
-            String oldValue = "Videos updated";
-            ev.setVideos(mapMediaDtosToMedia(dto.getVideos()));
-            addHistoryRecord(changes, "videos", oldValue, "New videos: " + dto.getVideos().size());
+            event.setVideos(mapMediaDtosToMedia(dto.getVideos()));
+            addHistoryRecord(changes, "videos", "Updated", "New videos: " + dto.getVideos().size());
         }
 
         if (dto.getDocuments() != null) {
-            String oldValue = "Documents updated";
-            ev.setDocuments(mapMediaDtosToMedia(dto.getDocuments()));
-            addHistoryRecord(changes, "documents", oldValue, "New documents: " + dto.getDocuments().size());
+            event.setDocuments(mapMediaDtosToMedia(dto.getDocuments()));
+            addHistoryRecord(changes, "documents", "Updated", "New documents: " + dto.getDocuments().size());
+        }
+
+        if (dto.getOtherData() != null) {
+            OtherData oldData = event.getOtherData();
+            OtherData newData = new OtherData(
+                    dto.getOtherData().getOrganizer(),
+                    dto.getOtherData().getContact(),
+                    dto.getOtherData().getNotes());
+
+            if (oldData == null || !newData.getOrganizer().equals(oldData.getOrganizer())) {
+                addHistoryRecord(changes, "organizer",
+                        oldData != null ? oldData.getOrganizer() : "none",
+                        newData.getOrganizer());
+            }
+
+            event.setOtherData(newData);
         }
     }
 }

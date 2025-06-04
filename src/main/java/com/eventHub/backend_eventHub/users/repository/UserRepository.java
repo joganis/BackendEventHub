@@ -1,6 +1,7 @@
 package com.eventHub.backend_eventHub.users.repository;
 
 import com.eventHub.backend_eventHub.domain.entities.Users;
+import com.eventHub.backend_eventHub.domain.enums.StateList;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
 
@@ -23,4 +24,6 @@ public interface UserRepository extends MongoRepository<Users, String> {
 //    List<Users> findByEmailAndAndName (String email, String name);
 
     List<Users> findByStateNameStateIgnoreCase(String nameState);
+
+    List<Users> findByState_NameState(StateList state);
 }
