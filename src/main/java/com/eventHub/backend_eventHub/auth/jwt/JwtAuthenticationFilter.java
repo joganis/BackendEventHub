@@ -18,6 +18,8 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * Filtro de autenticación JWT mejorado que se ejecuta una vez por cada solicitud HTTP.
@@ -37,6 +39,25 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final String BEARER_PREFIX = "Bearer ";
     private static final int BEARER_PREFIX_LENGTH = 7;
 
+    // Rutas que NO deben ser procesadas por el filtro JWT
+    private static final List<String> EXCLUDED_PATHS = Arrays.asList(
+            "/auth/register",
+            "/auth/login",
+            "/password/",
+            "/actuator/",
+            "/swagger-ui/",
+            "/v3/api-docs/"
+    );
+
+    // Rutas públicas de eventos que NO requieren autenticación
+    private static final List<String> PUBLIC_EVENT_PATHS = Arrays.asList(
+            "/api/events/search",
+            "/api/events/featured",
+            "/api/events/upcoming",
+            "/api/events/recent",
+            "/api/categories"
+    );
+
     @Override
     protected void doFilterInternal(
             @NonNull HttpServletRequest request,
@@ -44,18 +65,67 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             @NonNull FilterChain filterChain)
             throws ServletException, IOException {
 
+        String requestPath = request.getServletPath();
+        String method = request.getMethod();
+
+        log.debug("🔍 Processing JWT filter for: {} {}", method, requestPath);
+
         try {
             String jwt = extractTokenFromRequest(request);
 
+            // Solo procesar JWT si hay token Y no hay autenticación ya establecida
             if (jwt != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 processJwtToken(jwt, request);
+            } else if (jwt == null && isPublicPath(requestPath, method)) {
+                log.debug(" Public path accessed without token: {} {}", method, requestPath);
+                // Para rutas públicas sin token, simplemente continuar sin autenticación
+            } else if (jwt == null) {
+                log.debug(" No JWT token found for: {} {}", method, requestPath);
+                // No hay token pero puede ser una ruta que requiere autenticación - Spring Security se encargará
             }
         } catch (Exception e) {
-            log.error("Error procesando autenticación JWT: {}", e.getMessage());
+            log.error("Error procesando autenticación JWT para {} {}: {}", method, requestPath, e.getMessage());
             // No interrumpir la cadena de filtros, dejar que Spring Security maneje la falta de autenticación
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    /**
+     * Determina si una ruta es pública y no requiere autenticación.
+     */
+    private boolean isPublicPath(String path, String method) {
+        // Rutas públicas específicas
+        if (PUBLIC_EVENT_PATHS.stream().anyMatch(path::startsWith)) {
+            return true;
+        }
+
+        // Endpoints específicos de eventos públicos
+        if ("GET".equals(method)) {
+            // GET /api/events/{id} - detalle público de evento
+            if (path.matches("/api/events/[^/]+$")) {
+                return true;
+            }
+            // GET /api/categories/** - todas las categorías públicas
+            if (path.startsWith("/api/categories")) {
+                return true;
+            }
+            // GET /api/subevents/by-event/** - sub-eventos públicos
+            if (path.startsWith("/api/subevents/by-event/")) {
+                return true;
+            }
+            // GET /api/subevents/{id} - detalle público de sub-evento
+            if (path.matches("/api/subevents/[^/]+$")) {
+                return true;
+            }
+        }
+
+        // POST /api/events/search - búsqueda pública
+        if ("POST".equals(method) && "/api/events/search".equals(path)) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -95,15 +165,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 if (userDetails != null && jwtUtil.validateToken(jwt, userDetails)) {
                     setAuthenticationContext(userDetails, request);
-                    log.info("✅ Autenticación JWT exitosa para usuario: {}", userName);
+                    log.debug(" Autenticación JWT exitosa para usuario: {}", userName);
                 } else {
-                    log.warn("❌ Token JWT inválido para usuario: {}", userName);
+                    log.warn(" Token JWT inválido para usuario: {}", userName);
                 }
             }
         } catch (UsernameNotFoundException e) {
-            log.warn("❌ Usuario no encontrado en token JWT: {}", e.getMessage());
+            log.warn(" Usuario no encontrado en token JWT: {}", e.getMessage());
         } catch (Exception e) {
-            log.error("❌ Error procesando token JWT: {}", e.getMessage());
+            log.error(" Error procesando token JWT: {}", e.getMessage());
         }
     }
 
@@ -150,12 +220,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getServletPath();
 
-        // Excluir rutas públicas del procesamiento JWT para mejorar rendimiento
-        return path.equals("/auth/register") ||
-                path.equals("/auth/login") ||           // ← ESPECÍFICO, NO /auth/check-auth
-                path.startsWith("/password/") ||
-                path.startsWith("/actuator/") ||
-                path.startsWith("/swagger-ui/") ||
-                path.startsWith("/v3/api-docs/");
+        // Excluir rutas administrativas y de autenticación del procesamiento JWT
+        return EXCLUDED_PATHS.stream().anyMatch(path::startsWith);
     }
 }
