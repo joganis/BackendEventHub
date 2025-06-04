@@ -328,14 +328,58 @@ public class EventService {
     }
 
     private boolean isEventCreator(String username, String eventId) {
-        return eventRoleRepo.findByUsuarioUserNameAndEventoIdAndRolAndActivoTrue(username, eventId, "CREADOR")
-                .isPresent();
+        try {
+            // Obtener el usuario primero
+            Users user = userRepo.findByUserName(username).orElse(null);
+            if (user == null) {
+                return false;
+            }
+
+            // Buscar todos los roles activos del usuario
+            List<EventRole> roles = eventRoleRepo.findAll(); // Temporal - obtener todos
+
+            // Filtrar manualmente por usuario, evento y rol CREADOR
+            return roles.stream()
+                    .anyMatch(role ->
+                            role.getUsuario() != null &&
+                                    role.getUsuario().getId().equals(user.getId()) &&
+                                    role.getEvento() != null &&
+                                    role.getEvento().getId().equals(eventId) &&
+                                    role.isActivo() &&
+                                    role.getRol().equals("CREADOR")
+                    );
+
+        } catch (Exception e) {
+            System.err.println("Error en isEventCreator: " + e.getMessage());
+            return false;
+        }
     }
 
     private boolean canUserEditEvent(String username, String eventId) {
-        return eventRoleRepo.findByUsuarioUserNameAndEventoIdAndActivoTrue(username, eventId)
-                .stream()
-                .anyMatch(role -> role.getRol().equals("CREADOR") || role.getRol().equals("SUBCREADOR"));
+        try {
+            Users user = userRepo.findByUserName(username).orElse(null);
+            if (user == null) {
+                return false;
+            }
+
+            // Buscar todos los roles activos del usuario
+            List<EventRole> roles = eventRoleRepo.findAll();
+
+            // Filtrar por usuario, evento y roles permitidos
+            return roles.stream()
+                    .anyMatch(role ->
+                            role.getUsuario() != null &&
+                                    role.getUsuario().getId().equals(user.getId()) &&
+                                    role.getEvento() != null &&
+                                    role.getEvento().getId().equals(eventId) &&
+                                    role.isActivo() &&
+                                    (role.getRol().equals("CREADOR") || role.getRol().equals("SUBCREADOR"))
+                    );
+
+        } catch (Exception e) {
+            System.err.println("Error en canUserEditEvent: " + e.getMessage());
+            return false;
+        }
     }
 
     private boolean isFilterEmpty(EventFilterDto filter) {

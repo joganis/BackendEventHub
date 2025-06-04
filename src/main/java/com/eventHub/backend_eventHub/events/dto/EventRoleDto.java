@@ -7,8 +7,8 @@ import lombok.Data;
 
 @Data
 public class EventRoleDto {
-    @NotBlank
-    private String eventoId;
+//    @NotBlank
+//    private String eventoId;
 
     @Email
     @NotBlank
