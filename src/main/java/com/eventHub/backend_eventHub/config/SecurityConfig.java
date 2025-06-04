@@ -83,7 +83,7 @@ public class SecurityConfig {
         configuration.setAllowedOrigins(List.of(
                 "http://localhost:4200",
                 "http://localhost:5173",
-                "https://event-hub-rose-omega.vercel.app/",
+                "https://event-hub-rose-omega.vercel.app",
                 "admin-eventhub.vercel.app",
                 "http://127.0.0.1:54285"
         ));
