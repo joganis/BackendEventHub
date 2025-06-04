@@ -45,15 +45,33 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         // permitir preflights CORS
-                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        // Endpoints de autenticación públicos
                         .requestMatchers("/auth/register", "/auth/login").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
-                        .requestMatchers( "/password/**", "/actuator/health", "/actuator/info").permitAll()
+                        .requestMatchers("/password/**", "/actuator/health", "/actuator/info").permitAll()
+
+                        // ========== CATEGORÍAS ==========
+                        // Endpoints públicos de categorías (lectura)
+                        .requestMatchers(HttpMethod.GET, "/api/categories").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/categories/{id}").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/categories/search").permitAll()
+
+                        // Endpoints administrativos de categorías (requieren ROLE_ADMIN)
+                        .requestMatchers(HttpMethod.POST, "/api/categories").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/categories/{id}").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/categories/{id}/toggle-status").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/categories/admin/all").hasRole("ADMIN")
+
+                        // Endpoints administrativos generales
                         .requestMatchers("/admin/**").hasRole("ADMIN")
+
+                        // Endpoints de usuario autenticado
                         .requestMatchers("/auth/check-auth").authenticated()
                         .requestMatchers(HttpMethod.GET, "/users/me", "/users/me/**").authenticated()
                         .requestMatchers(HttpMethod.PUT, "/users/me", "/users/me/**").authenticated()
                         .requestMatchers("/users/**").hasRole("ADMIN")
+
+                        // Por defecto, todo lo demás requiere autenticación
                         .anyRequest().authenticated()
                 )  // se quita ;
         //se quite http
