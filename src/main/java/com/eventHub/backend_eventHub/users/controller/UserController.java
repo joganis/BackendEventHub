@@ -6,36 +6,39 @@ import com.eventHub.backend_eventHub.users.dto.UserProfileDto;
 import com.eventHub.backend_eventHub.users.service.UserService;
 import com.eventHub.backend_eventHub.domain.entities.Users;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.validation.BindingResult;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 /**
- * Controlador REST para la gestión de usuarios.
- * Permite listar, buscar, mostrar detalles, actualizar perfil y cambiar estado.
+ * Controlador REST mejorado para la gestión de usuarios.
+ * Incluye mejor documentación, validaciones y manejo de respuestas.
  */
 @RestController
 @RequestMapping("/users")
 @Tag(name = "Users", description = "Operaciones CRUD y de estado para usuarios")
 @RequiredArgsConstructor
 @Validated
+@Slf4j
 public class UserController {
 
     private final UserService userService;
-
-
 
     //─────────────────────────────────────────────────────────
     //   Perfil propio: cualquier usuario autenticado
@@ -43,139 +46,307 @@ public class UserController {
 
     @GetMapping("/me")
     @PreAuthorize("isAuthenticated()")
-    @Operation(summary = "Mi perfil", description = "Obtiene los datos del usuario autenticado")
+    @Operation(
+            summary = "Obtener mi perfil",
+            description = "Obtiene los datos del usuario autenticado actualmente"
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Perfil obtenido exitosamente"),
+            @ApiResponse(responseCode = "401", description = "Usuario no autenticado"),
+            @ApiResponse(responseCode = "404", description = "Usuario no encontrado")
+    })
     public ResponseEntity<UserProfileDto> getMe(Principal principal) {
-        Users u = userService.getMe(principal);
-        return ResponseEntity.ok(toDto(u));
+        log.debug("Obteniendo perfil para usuario: {}", principal.getName());
+
+        Users user = userService.getMe(principal);
+        UserProfileDto dto = mapToDto(user);
+
+        return ResponseEntity.ok(dto);
     }
 
     @PutMapping("/me")
     @PreAuthorize("isAuthenticated()")
-    @Operation(summary = "Actualizar mi perfil", description = "Modifica datos del usuario autenticado")
+    @Operation(
+            summary = "Actualizar mi perfil",
+            description = "Modifica los datos del usuario autenticado"
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Perfil actualizado exitosamente"),
+            @ApiResponse(responseCode = "400", description = "Datos de entrada inválidos"),
+            @ApiResponse(responseCode = "401", description = "Usuario no autenticado"),
+            @ApiResponse(responseCode = "409", description = "Conflicto - Email ya existe")
+    })
     public ResponseEntity<UserProfileDto> updateMe(
             Principal principal,
-            @Valid @RequestBody UpdateUserDto dto,
-            BindingResult br) {
-        if (br.hasErrors()) {
-            return ResponseEntity.badRequest().build();
-        }
+            @Valid @RequestBody UpdateUserDto dto) {
+
+        log.info("Actualizando perfil para usuario: {}", principal.getName());
+
         Users updated = userService.updateMe(principal, dto);
-        return ResponseEntity.ok(toDto(updated));
+        UserProfileDto responseDto = mapToDto(updated);
+
+        return ResponseEntity.ok(responseDto);
     }
 
+    //─────────────────────────────────────────────────────────
+    //   Gestión de usuarios: solo administradores
+    //─────────────────────────────────────────────────────────
 
-    /**
-     * GET /users?state={estado}
-     * Lista todos los usuarios, opcionalmente filtrados por estado.
-     */
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Listar usuarios", description = "Obtiene todos los usuarios o filtra por estado")
-    public ResponseEntity<List<UserProfileDto>> list(@RequestParam Optional<String> state) {
-        List<UserProfileDto> dtos = userService.getAll(state).stream()
-                .map(this::toDto)
-                .collect(Collectors.toList());
-        return ResponseEntity.ok(dtos);
+    @Operation(
+            summary = "Listar usuarios",
+            description = "Obtiene todos los usuarios del sistema, opcionalmente filtrados por estado"
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Usuarios obtenidos exitosamente"),
+            @ApiResponse(responseCode = "401", description = "Usuario no autenticado"),
+            @ApiResponse(responseCode = "403", description = "Acceso denegado - Se requiere rol ADMIN")
+    })
+    public ResponseEntity<StandardListResponse<UserProfileDto>> list(
+            @Parameter(description = "Estado para filtrar usuarios (opcional)")
+            @RequestParam Optional<String> state) {
+
+        log.debug("Listando usuarios con filtro de estado: {}", state.orElse("ninguno"));
+
+        List<Users> users = userService.getAll(state);
+        List<UserProfileDto> dtos = users.stream()
+                .map(this::mapToDto)
+                .toList();
+
+        StandardListResponse<UserProfileDto> response = StandardListResponse.<UserProfileDto>builder()
+                .data(dtos)
+                .total(dtos.size())
+                .filtered(state.isPresent())
+                .filter(state.orElse(null))
+                .build();
+
+        return ResponseEntity.ok(response);
     }
 
-    /**
-     * GET /users/{id}
-     * Obtiene un usuario por su ID.
-     */
     @GetMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN') ")
-    @Operation(summary = "Obtener usuario", description = "Busca un usuario por su identificador")
-    public ResponseEntity<UserProfileDto> getById(@PathVariable String id) {
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(
+            summary = "Obtener usuario por ID",
+            description = "Busca un usuario específico por su identificador único"
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Usuario encontrado"),
+            @ApiResponse(responseCode = "401", description = "Usuario no autenticado"),
+            @ApiResponse(responseCode = "403", description = "Acceso denegado - Se requiere rol ADMIN"),
+            @ApiResponse(responseCode = "404", description = "Usuario no encontrado")
+    })
+    public ResponseEntity<UserProfileDto> getById(
+            @Parameter(description = "ID único del usuario")
+            @PathVariable @NotBlank String id) {
+
+        log.debug("Obteniendo usuario por ID: {}", id);
+
         Users user = userService.getById(id);
-        return ResponseEntity.ok(toDto(user));
+        UserProfileDto dto = mapToDto(user);
+
+        return ResponseEntity.ok(dto);
     }
 
-    /**
-     * GET /users/search?username={userName}
-     * Busca usuarios por coincidencia de userName.
-     */
     @GetMapping("/search")
     @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Buscar usuarios", description = "Busca usuarios por parte de su nombre de usuario")
-    public ResponseEntity<List<UserProfileDto>> search(@RequestParam String username) {
-        List<UserProfileDto> dtos = userService.searchByUserName(username).stream()
-                .map(this::toDto)
-                .collect(Collectors.toList());
-        return ResponseEntity.ok(dtos);
+    @Operation(
+            summary = "Buscar usuarios",
+            description = "Busca usuarios por coincidencia parcial en el nombre de usuario"
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Búsqueda completada"),
+            @ApiResponse(responseCode = "400", description = "Parámetro de búsqueda inválido"),
+            @ApiResponse(responseCode = "401", description = "Usuario no autenticado"),
+            @ApiResponse(responseCode = "403", description = "Acceso denegado - Se requiere rol ADMIN")
+    })
+    public ResponseEntity<StandardListResponse<UserProfileDto>> search(
+            @Parameter(description = "Término de búsqueda para el nombre de usuario")
+            @RequestParam @NotBlank String username) {
+
+        log.debug("Buscando usuarios con término: {}", username);
+
+        List<Users> users = userService.searchByUserName(username);
+        List<UserProfileDto> dtos = users.stream()
+                .map(this::mapToDto)
+                .toList();
+
+        StandardListResponse<UserProfileDto> response = StandardListResponse.<UserProfileDto>builder()
+                .data(dtos)
+                .total(dtos.size())
+                .filtered(true)
+                .filter(username)
+                .build();
+
+        return ResponseEntity.ok(response);
     }
 
-    /**
-     * PUT /users/{id}
-     * Actualiza la información de perfil de un usuario.
-     */
-//    @PutMapping("/{id}")
-//    @PreAuthorize("hasRole('ADMIN') or #id == authentication.principal.username")
-//    @Operation(summary = "Actualizar perfil", description = "Permite al usuario o admin actualizar datos de perfil")
-//    public ResponseEntity<?> update(
-//            @PathVariable String id,
-//            @Valid @RequestBody UpdateUserDto dto,
-//            BindingResult br) {
-//        if (br.hasErrors()) {
-//            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(br.getAllErrors());
-//        }
-//        Users updated = userService.updateUser(id, dto);
-//        return ResponseEntity.ok(toDto(updated));
-//    }
-
-    /**
-     * PATCH /users/{id}/status
-     * Modifica únicamente el estado del usuario.
-     */
     @PatchMapping("/{id}/status")
     @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Cambiar estado", description = "Permite al admin cambiar el estado del usuario")
-    public ResponseEntity<?> changeStatus(
-            @PathVariable String id,
-            @Valid @RequestBody ChangeStatusDto dto,
-            BindingResult br) {
-        if (br.hasErrors()) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(br.getAllErrors());
-        }
+    @Operation(
+            summary = "Cambiar estado de usuario",
+            description = "Permite al administrador cambiar el estado de un usuario específico"
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Estado cambiado exitosamente"),
+            @ApiResponse(responseCode = "400", description = "Estado inválido"),
+            @ApiResponse(responseCode = "401", description = "Usuario no autenticado"),
+            @ApiResponse(responseCode = "403", description = "Acceso denegado - Se requiere rol ADMIN"),
+            @ApiResponse(responseCode = "404", description = "Usuario no encontrado")
+    })
+    public ResponseEntity<StandardApiResponse<UserProfileDto>> changeStatus(
+            @Parameter(description = "ID único del usuario")
+            @PathVariable @NotBlank String id,
+            @Valid @RequestBody ChangeStatusDto dto) {
+
+        log.info("Cambiando estado del usuario {} a: {}", id, dto.getState());
+
         Users updated = userService.changeState(id, dto);
-        return ResponseEntity.ok(toDto(updated));
+        UserProfileDto responseDto = mapToDto(updated);
+
+        StandardApiResponse<UserProfileDto> response = StandardApiResponse.<UserProfileDto>builder()
+                .success(true)
+                .message("Estado del usuario actualizado exitosamente")
+                .data(responseDto)
+                .build();
+
+        return ResponseEntity.ok(response);
     }
 
-    /**
-     * Mapea la entidad Users al DTO UserProfileDto.
-     * Añadido manejo de nulos para evitar NullPointerException.
-     *
-     * @param u Entidad Users recuperada de la base de datos
-     * @return DTO con sólo los campos que debe exponer el API
-     */
-    private UserProfileDto toDto(Users u) {
-        UserProfileDto dto = new UserProfileDto();
-        dto.setId(u.getId());
-        dto.setUserName(u.getUserName());
-        dto.setEmail(u.getEmail());
-        dto.setName(u.getName());
-        dto.setLastName(u.getLastName());
-        dto.setIdentification(u.getIdentification());
-        dto.setBirthDate(u.getBirthDate());
-        dto.setPhone(u.getPhone());
-        dto.setHomeAddress(u.getHomeAddress());
-        dto.setCountry(u.getCountry());
-        dto.setCity(u.getCity());
-        dto.setPhoto(u.getPhoto());
+    //─────────────────────────────────────────────────────────
+    //   Endpoints de utilidad para validaciones
+    //─────────────────────────────────────────────────────────
 
-        // Manejo seguro del estado para evitar NullPointerException
-        if (u.getState() != null && u.getState().getNameState() != null) {
-            dto.setState(u.getState().getNameState().name());
-        } else {
-            dto.setState("Unknown"); // Valor por defecto cuando no hay estado
+    @GetMapping("/check/username/{username}")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(
+            summary = "Verificar disponibilidad de username",
+            description = "Verifica si un nombre de usuario está disponible"
+    )
+    public ResponseEntity<AvailabilityResponse> checkUsernameAvailability(
+            @Parameter(description = "Nombre de usuario a verificar")
+            @PathVariable @NotBlank String username) {
+
+        boolean available = userService.isUserNameAvailable(username);
+
+        AvailabilityResponse response = AvailabilityResponse.builder()
+                .available(available)
+                .field("username")
+                .value(username)
+                .message(available ? "Username disponible" : "Username ya está en uso")
+                .build();
+
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/check/email/{email}")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(
+            summary = "Verificar disponibilidad de email",
+            description = "Verifica si un email está disponible"
+    )
+    public ResponseEntity<AvailabilityResponse> checkEmailAvailability(
+            @Parameter(description = "Email a verificar")
+            @PathVariable @NotBlank String email) {
+
+        boolean available = userService.isEmailAvailable(email);
+
+        AvailabilityResponse response = AvailabilityResponse.builder()
+                .available(available)
+                .field("email")
+                .value(email)
+                .message(available ? "Email disponible" : "Email ya está en uso")
+                .build();
+
+        return ResponseEntity.ok(response);
+    }
+
+    //─────────────────────────────────────────────────────────
+    //   Métodos de mapeo y DTOs de respuesta
+    //─────────────────────────────────────────────────────────
+
+    /**
+     * Mapea la entidad Users al DTO UserProfileDto de forma segura.
+     * Incluye manejo robusto de valores nulos.
+     *
+     * @param user Entidad Users recuperada de la base de datos
+     * @return DTO con los campos expuestos por la API
+     */
+    private UserProfileDto mapToDto(Users user) {
+        if (user == null) {
+            return null;
         }
 
-        // Manejo seguro del rol para evitar NullPointerException
-        if (u.getRole() != null && u.getRole().getNombreRol() != null) {
-            dto.setRole(u.getRole().getNombreRol().name());
+        UserProfileDto dto = new UserProfileDto();
+        dto.setId(user.getId());
+        dto.setUserName(user.getUserName());
+        dto.setEmail(user.getEmail());
+        dto.setName(user.getName());
+        dto.setLastName(user.getLastName());
+        dto.setIdentification(user.getIdentification());
+        dto.setBirthDate(user.getBirthDate());
+        dto.setPhone(user.getPhone());
+        dto.setHomeAddress(user.getHomeAddress());
+        dto.setCountry(user.getCountry());
+        dto.setCity(user.getCity());
+        dto.setPhoto(user.getPhoto());
+
+        // Manejo seguro del estado
+        if (user.getState() != null && user.getState().getNameState() != null) {
+            dto.setState(user.getState().getNameState().name());
         } else {
-            dto.setRole("Unknown"); // Valor por defecto cuando no hay rol
+            dto.setState("Unknown");
+        }
+
+        // Manejo seguro del rol
+        if (user.getRole() != null && user.getRole().getNombreRol() != null) {
+            dto.setRole(user.getRole().getNombreRol().name());
+        } else {
+            dto.setRole("Unknown");
         }
 
         return dto;
+    }
+
+    //─────────────────────────────────────────────────────────
+    //   DTOs de respuesta para la API
+    //─────────────────────────────────────────────────────────
+
+    /**
+     * Respuesta genérica de la API.
+     */
+    @lombok.Data
+    @lombok.Builder
+    public static class StandardApiResponse<T> {
+        private boolean success;
+        private String message;
+        private T data;
+        private String timestamp = java.time.LocalDateTime.now().toString();
+    }
+
+    /**
+     * Respuesta para listas de elementos.
+     */
+    @lombok.Data
+    @lombok.Builder
+    public static class StandardListResponse<T> {
+        private List<T> data;
+        private int total;
+        private boolean filtered;
+        private String filter;
+        private String timestamp = java.time.LocalDateTime.now().toString();
+    }
+
+    /**
+     * Respuesta para verificación de disponibilidad.
+     */
+    @lombok.Data
+    @lombok.Builder
+    public static class AvailabilityResponse {
+        private boolean available;
+        private String field;
+        private String value;
+        private String message;
+        private String timestamp = java.time.LocalDateTime.now().toString();
     }
 }

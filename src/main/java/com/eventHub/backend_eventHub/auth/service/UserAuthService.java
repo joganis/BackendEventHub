@@ -58,4 +58,7 @@ public class UserAuthService implements UserDetailsService {
     }
 
 
+    public Object findByEmail(String mail) {
+        return userRepository.findByEmail(mail);
+    }
 }
