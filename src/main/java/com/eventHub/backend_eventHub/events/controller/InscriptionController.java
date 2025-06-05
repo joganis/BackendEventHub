@@ -1,7 +1,3 @@
-// ================================
-// InscriptionController SEPARADO - Para gestión de inscripciones
-// ================================
-
 package com.eventHub.backend_eventHub.events.controller;
 
 import com.eventHub.backend_eventHub.events.dto.InscriptionDto;
@@ -20,7 +16,10 @@ import org.springframework.web.server.ResponseStatusException;
 
 import jakarta.validation.Valid;
 import java.security.Principal;
+import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Tag(name = "Inscripciones", description = "Gestión de inscripciones a eventos")
 @RestController
@@ -34,106 +33,172 @@ public class InscriptionController {
     @Operation(summary = "Inscribirse a evento", description = "Inscribe al usuario autenticado a un evento")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Inscripción creada correctamente"),
-            @ApiResponse(responseCode = "400", description = "Error en los datos o evento lleno"),
+            @ApiResponse(responseCode = "400", description = "Datos inválidos o condiciones no cumplidas"),
             @ApiResponse(responseCode = "401", description = "No autorizado"),
+            @ApiResponse(responseCode = "404", description = "Evento no encontrado"),
+            @ApiResponse(responseCode = "409", description = "Conflicto - Ya inscrito o evento lleno"),
             @ApiResponse(responseCode = "500", description = "Error interno del servidor")
     })
     @PreAuthorize("hasRole('USUARIO')")
     @PostMapping("/register")
-    public ResponseEntity<Inscription> registerToEvent(Principal principal,
-                                                       @Valid @RequestBody InscriptionDto dto) {
+    public ResponseEntity<?> registerToEvent(Principal principal,
+                                             @Valid @RequestBody InscriptionDto dto) {
         try {
-            // Usar método mejorado del servicio
             Inscription inscription = inscriptionService.registerToEvent(principal.getName(), dto);
-            return ResponseEntity.status(HttpStatus.CREATED).body(inscription);
+
+            // ✅ RESPUESTA EXITOSA con información adicional
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Te has inscrito exitosamente al evento");
+            response.put("inscription", inscription);
+            response.put("timestamp", LocalDateTime.now());
+
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
+
         } catch (IllegalArgumentException e) {
-            // Mensajes de error más específicos
-            if (e.getMessage().contains("no encontrado")) {
-                throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
-            } else if (e.getMessage().contains("lleno") ||
-                    e.getMessage().contains("cerradas") ||
-                    e.getMessage().contains("ya estás inscrito")) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage());
-            } else {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
-            }
+            // ✅ MANEJO DETALLADO DE ERRORES DE VALIDACIÓN
+            return handleValidationError(e);
         } catch (Exception e) {
-            // Log del error para debugging
+            // ✅ ERROR INTERNO CON LOGGING
             System.err.println("Error inesperado en inscripción: " + e.getMessage());
             e.printStackTrace();
 
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
-                    "Error al inscribirse al evento: " + e.getMessage());
+            Map<String, Object> errorResponse = createErrorResponse(
+                    "Error interno del servidor",
+                    "Ha ocurrido un error inesperado. Por favor, intenta nuevamente.",
+                    HttpStatus.INTERNAL_SERVER_ERROR
+            );
+
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
 
     @Operation(summary = "Inscribirse a sub-evento", description = "Inscribe al usuario a un sub-evento específico")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Inscripción a sub-evento creada correctamente"),
-            @ApiResponse(responseCode = "400", description = "Error en los datos o sub-evento lleno"),
+            @ApiResponse(responseCode = "400", description = "Datos inválidos o condiciones no cumplidas"),
             @ApiResponse(responseCode = "401", description = "No autorizado"),
+            @ApiResponse(responseCode = "404", description = "Sub-evento no encontrado"),
+            @ApiResponse(responseCode = "409", description = "Conflicto - Ya inscrito o sub-evento lleno"),
             @ApiResponse(responseCode = "500", description = "Error interno del servidor")
     })
     @PreAuthorize("hasRole('USUARIO')")
     @PostMapping("/register-subevent")
-    public ResponseEntity<Inscription> registerToSubEvent(Principal principal,
-                                                          @Valid @RequestBody InscriptionDto dto) {
+    public ResponseEntity<?> registerToSubEvent(Principal principal,
+                                                @Valid @RequestBody InscriptionDto dto) {
         try {
             if (dto.getSubeventoId() == null || dto.getSubeventoId().isEmpty()) {
-                throw new IllegalArgumentException("ID de sub-evento es requerido");
+                Map<String, Object> errorResponse = createErrorResponse(
+                        "Datos inválidos",
+                        "El ID del sub-evento es requerido",
+                        HttpStatus.BAD_REQUEST
+                );
+                return ResponseEntity.badRequest().body(errorResponse);
             }
+
             dto.setTipoInscripcion("subevento");
             Inscription inscription = inscriptionService.registerToSubEvent(principal.getName(), dto);
-            return ResponseEntity.status(HttpStatus.CREATED).body(inscription);
+
+            // ✅ RESPUESTA EXITOSA
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Te has inscrito exitosamente al sub-evento");
+            response.put("inscription", inscription);
+            response.put("timestamp", LocalDateTime.now());
+
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
+
         } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+            return handleValidationError(e);
         } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
-                    "Error al inscribirse al sub-evento: " + e.getMessage());
+            System.err.println("Error inesperado en inscripción a sub-evento: " + e.getMessage());
+            e.printStackTrace();
+
+            Map<String, Object> errorResponse = createErrorResponse(
+                    "Error interno del servidor",
+                    "Ha ocurrido un error inesperado. Por favor, intenta nuevamente.",
+                    HttpStatus.INTERNAL_SERVER_ERROR
+            );
+
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
 
     @Operation(summary = "Cancelar inscripción", description = "Cancela la inscripción del usuario a un evento")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "204", description = "Inscripción cancelada correctamente"),
-            @ApiResponse(responseCode = "400", description = "No tiene inscripción activa"),
+            @ApiResponse(responseCode = "200", description = "Inscripción cancelada correctamente"),
+            @ApiResponse(responseCode = "400", description = "No se puede cancelar la inscripción"),
             @ApiResponse(responseCode = "401", description = "No autorizado"),
+            @ApiResponse(responseCode = "404", description = "Inscripción no encontrada"),
             @ApiResponse(responseCode = "500", description = "Error interno del servidor")
     })
     @PreAuthorize("hasRole('USUARIO')")
     @DeleteMapping("/cancel/{eventoId}")
-    public ResponseEntity<Void> cancelRegistration(@PathVariable String eventoId, Principal principal) {
+    public ResponseEntity<?> cancelRegistration(@PathVariable String eventoId, Principal principal) {
         try {
             inscriptionService.cancelRegistration(principal.getName(), eventoId);
-            return ResponseEntity.noContent().build();
+
+            // ✅ RESPUESTA EXITOSA
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Tu inscripción ha sido cancelada exitosamente");
+            response.put("timestamp", LocalDateTime.now());
+
+            return ResponseEntity.ok(response);
+
         } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+            return handleValidationError(e);
         } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
-                    "Error al cancelar inscripción: " + e.getMessage());
+            System.err.println("Error cancelando inscripción: " + e.getMessage());
+            e.printStackTrace();
+
+            Map<String, Object> errorResponse = createErrorResponse(
+                    "Error interno del servidor",
+                    "Ha ocurrido un error inesperado. Por favor, intenta nuevamente.",
+                    HttpStatus.INTERNAL_SERVER_ERROR
+            );
+
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
 
     @Operation(summary = "Cancelar inscripción a sub-evento",
             description = "Cancela la inscripción del usuario a un sub-evento")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "204", description = "Inscripción a sub-evento cancelada correctamente"),
-            @ApiResponse(responseCode = "400", description = "No tiene inscripción activa en el sub-evento"),
+            @ApiResponse(responseCode = "200", description = "Inscripción a sub-evento cancelada correctamente"),
+            @ApiResponse(responseCode = "400", description = "No se puede cancelar la inscripción"),
             @ApiResponse(responseCode = "401", description = "No autorizado"),
+            @ApiResponse(responseCode = "404", description = "Inscripción no encontrada"),
             @ApiResponse(responseCode = "500", description = "Error interno del servidor")
     })
     @PreAuthorize("hasRole('USUARIO')")
     @DeleteMapping("/cancel-subevent/{subeventoId}")
-    public ResponseEntity<Void> cancelSubEventRegistration(@PathVariable String subeventoId,
-                                                           Principal principal) {
+    public ResponseEntity<?> cancelSubEventRegistration(@PathVariable String subeventoId,
+                                                        Principal principal) {
         try {
             inscriptionService.cancelSubEventRegistration(principal.getName(), subeventoId);
-            return ResponseEntity.noContent().build();
+
+            // ✅ RESPUESTA EXITOSA
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "Tu inscripción al sub-evento ha sido cancelada exitosamente");
+            response.put("timestamp", LocalDateTime.now());
+
+            return ResponseEntity.ok(response);
+
         } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+            return handleValidationError(e);
         } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
-                    "Error al cancelar inscripción al sub-evento: " + e.getMessage());
+            System.err.println("Error cancelando inscripción a sub-evento: " + e.getMessage());
+            e.printStackTrace();
+
+            Map<String, Object> errorResponse = createErrorResponse(
+                    "Error interno del servidor",
+                    "Ha ocurrido un error inesperado. Por favor, intenta nuevamente.",
+                    HttpStatus.INTERNAL_SERVER_ERROR
+            );
+
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
 
@@ -145,13 +210,28 @@ public class InscriptionController {
     })
     @PreAuthorize("hasRole('USUARIO')")
     @GetMapping("/my-registrations")
-    public ResponseEntity<List<Inscription>> getMyRegistrations(Principal principal) {
+    public ResponseEntity<?> getMyRegistrations(Principal principal) {
         try {
             List<Inscription> inscriptions = inscriptionService.getUserRegistrations(principal.getName());
-            return ResponseEntity.ok(inscriptions);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("data", inscriptions);
+            response.put("count", inscriptions.size());
+            response.put("message", "Inscripciones obtenidas correctamente");
+            response.put("timestamp", LocalDateTime.now());
+
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
-                    "Error al obtener inscripciones: " + e.getMessage());
+            System.err.println("Error obteniendo inscripciones: " + e.getMessage());
+
+            Map<String, Object> errorResponse = createErrorResponse(
+                    "Error interno del servidor",
+                    "No se pudieron obtener las inscripciones",
+                    HttpStatus.INTERNAL_SERVER_ERROR
+            );
+
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
 
@@ -164,13 +244,28 @@ public class InscriptionController {
     })
     @PreAuthorize("hasRole('USUARIO')")
     @GetMapping("/my-subevent-registrations")
-    public ResponseEntity<List<Inscription>> getMySubEventRegistrations(Principal principal) {
+    public ResponseEntity<?> getMySubEventRegistrations(Principal principal) {
         try {
             List<Inscription> inscriptions = inscriptionService.getUserSubEventRegistrations(principal.getName());
-            return ResponseEntity.ok(inscriptions);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("data", inscriptions);
+            response.put("count", inscriptions.size());
+            response.put("message", "Inscripciones a sub-eventos obtenidas correctamente");
+            response.put("timestamp", LocalDateTime.now());
+
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
-                    "Error al obtener inscripciones a sub-eventos: " + e.getMessage());
+            System.err.println("Error obteniendo inscripciones a sub-eventos: " + e.getMessage());
+
+            Map<String, Object> errorResponse = createErrorResponse(
+                    "Error interno del servidor",
+                    "No se pudieron obtener las inscripciones a sub-eventos",
+                    HttpStatus.INTERNAL_SERVER_ERROR
+            );
+
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
 
@@ -182,13 +277,27 @@ public class InscriptionController {
     })
     @PreAuthorize("hasRole('USUARIO')")
     @GetMapping("/check/{eventoId}")
-    public ResponseEntity<Boolean> checkRegistration(@PathVariable String eventoId, Principal principal) {
+    public ResponseEntity<?> checkRegistration(@PathVariable String eventoId, Principal principal) {
         try {
             boolean isRegistered = inscriptionService.isUserRegistered(principal.getName(), eventoId);
-            return ResponseEntity.ok(isRegistered);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("isRegistered", isRegistered);
+            response.put("message", isRegistered ? "Estás inscrito en este evento" : "No estás inscrito en este evento");
+            response.put("timestamp", LocalDateTime.now());
+
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
-                    "Error al verificar inscripción: " + e.getMessage());
+            System.err.println("Error verificando inscripción: " + e.getMessage());
+
+            Map<String, Object> errorResponse = createErrorResponse(
+                    "Error interno del servidor",
+                    "No se pudo verificar el estado de inscripción",
+                    HttpStatus.INTERNAL_SERVER_ERROR
+            );
+
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
 
@@ -202,15 +311,87 @@ public class InscriptionController {
     })
     @PreAuthorize("hasRole('USUARIO')")
     @GetMapping("/event/{eventoId}")
-    public ResponseEntity<List<Inscription>> getEventRegistrations(@PathVariable String eventoId,
-                                                                   Principal principal) {
+    public ResponseEntity<?> getEventRegistrations(@PathVariable String eventoId,
+                                                   Principal principal) {
         try {
-            // Aquí podrías agregar validación de que el usuario es organizador
             List<Inscription> inscriptions = inscriptionService.getEventRegistrations(eventoId);
-            return ResponseEntity.ok(inscriptions);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("data", inscriptions);
+            response.put("count", inscriptions.size());
+            response.put("message", "Inscripciones del evento obtenidas correctamente");
+            response.put("timestamp", LocalDateTime.now());
+
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
-                    "Error al obtener inscripciones del evento: " + e.getMessage());
+            System.err.println("Error obteniendo inscripciones del evento: " + e.getMessage());
+
+            Map<String, Object> errorResponse = createErrorResponse(
+                    "Error interno del servidor",
+                    "No se pudieron obtener las inscripciones del evento",
+                    HttpStatus.INTERNAL_SERVER_ERROR
+            );
+
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
+
+    // ================ MÉTODOS AUXILIARES PARA MANEJO DE ERRORES ================
+
+    /**
+     * ✅ MANEJA ERRORES DE VALIDACIÓN CON CÓDIGOS HTTP APROPIADOS
+     */
+    private ResponseEntity<?> handleValidationError(IllegalArgumentException e) {
+        String message = e.getMessage();
+        HttpStatus status;
+        String errorType;
+
+        // ✅ DETERMINAR EL CÓDIGO HTTP APROPIADO SEGÚN EL MENSAJE
+        if (message.contains("ya estás inscrito") ||
+                message.contains("ya inscrito") ||
+                message.contains("capacidad máxima") ||
+                message.contains("evento lleno") ||
+                message.contains("sub-evento lleno")) {
+            status = HttpStatus.CONFLICT; // 409
+            errorType = "Conflicto de inscripción";
+
+        } else if (message.contains("no encontrado")) {
+            status = HttpStatus.NOT_FOUND; // 404
+            errorType = "Recurso no encontrado";
+
+        } else if (message.contains("cerradas") ||
+                message.contains("no permite inscripciones") ||
+                message.contains("fecha límite") ||
+                message.contains("ya comenzó") ||
+                message.contains("ya ha comenzado") ||
+                message.contains("bloqueado") ||
+                message.contains("no activo") ||
+                message.contains("propio evento") ||
+                message.contains("no puedes cancelar")) {
+            status = HttpStatus.BAD_REQUEST; // 400
+            errorType = "Condición no válida";
+
+        } else {
+            status = HttpStatus.BAD_REQUEST; // 400 por defecto
+            errorType = "Datos inválidos";
+        }
+
+        Map<String, Object> errorResponse = createErrorResponse(errorType, message, status);
+        return ResponseEntity.status(status).body(errorResponse);
+    }
+
+    /**
+     * ✅ CREA RESPUESTAS DE ERROR CONSISTENTES
+     */
+    private Map<String, Object> createErrorResponse(String error, String message, HttpStatus status) {
+        Map<String, Object> errorResponse = new HashMap<>();
+        errorResponse.put("success", false);
+        errorResponse.put("error", error);
+        errorResponse.put("message", message);
+        errorResponse.put("status", status.value());
+        errorResponse.put("timestamp", LocalDateTime.now());
+        return errorResponse;
+    }
 }
+

@@ -1,4 +1,4 @@
-// InscriptionService completo
+// InscriptionService CORREGIDO
 package com.eventHub.backend_eventHub.events.service;
 
 import com.eventHub.backend_eventHub.events.dto.InscriptionDto;
@@ -23,7 +23,7 @@ public class InscriptionService {
     @Autowired private UserRepository userRepo;
 
     /**
-     * Inscribe un usuario a un evento principal
+     * Inscribe un usuario a un evento principal CON VALIDACIONES MEJORADAS
      */
     @Transactional
     public Inscription registerToEvent(String username, InscriptionDto dto) {
@@ -31,22 +31,29 @@ public class InscriptionService {
         Users user = userRepo.findByUserName(username)
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado: " + username));
 
-        // 2. Verificar si ya está inscrito
-        Optional<Inscription> existingInscription = inscriptionRepo
-                .findByUsuarioIdAndEventoIdAndEstado(user.getId(), dto.getEventoId(), "confirmada");
-
-        if (existingInscription.isPresent() &&
-                "evento_principal".equals(existingInscription.get().getTipoInscripcion())) {
-            throw new IllegalArgumentException("Ya estás inscrito en este evento");
-        }
-
-        // 3. Obtener y validar evento
+        // 2. Obtener y validar evento
         Event event = eventRepo.findById(dto.getEventoId())
                 .orElseThrow(() -> new IllegalArgumentException("Evento no encontrado con ID: " + dto.getEventoId()));
 
-        validateEventForRegistration(event); // Usar método auxiliar
+        // 3. ✅ VALIDACIÓN MEJORADA - Verificar si ya está inscrito (MÁS ESPECÍFICA)
+        boolean yaEstaInscrito = inscriptionRepo.findAll().stream()
+                .anyMatch(inscription ->
+                        inscription.getUsuario() != null &&
+                                inscription.getUsuario().getId().equals(user.getId()) &&
+                                inscription.getEvento() != null &&
+                                inscription.getEvento().getId().equals(event.getId()) &&
+                                "confirmada".equals(inscription.getEstado()) &&
+                                "evento_principal".equals(inscription.getTipoInscripcion())
+                );
 
-        // 4. Crear inscripción
+        if (yaEstaInscrito) {
+            throw new IllegalArgumentException("Ya estás inscrito en este evento");
+        }
+
+        // 4. Validar todas las condiciones del evento
+        validateEventForRegistration(event, user);
+
+        // 5. Crear inscripción
         Inscription inscription = Inscription.builder()
                 .usuario(user)
                 .evento(event)
@@ -55,84 +62,99 @@ public class InscriptionService {
                 .tipoInscripcion("evento_principal")
                 .build();
 
-        // 5. Guardar y actualizar contador
+        // 6. Guardar y actualizar contador
         inscription = inscriptionRepo.save(inscription);
-        event.setCurrentAttendees(event.getCurrentAttendees() + 1);
-        eventRepo.save(event);
+        updateEventAttendeeCount(event);
 
         return inscription;
     }
 
-    private void validateEventForRegistration(Event event) {
-        if (event.getCurrentAttendees() >= event.getMaxAttendees()) {
-            throw new IllegalArgumentException("Evento lleno - no hay cupos disponibles");
-        }
-
-        if (!event.isPermitirInscripciones()) {
-            throw new IllegalArgumentException("Las inscripciones están cerradas para este evento");
-        }
-
-        if (event.isBloqueado()) {
-            throw new IllegalArgumentException("Este evento no está disponible");
-        }
-
+    /**
+     * ✅ VALIDACIONES MEJORADAS DEL EVENTO
+     */
+    private void validateEventForRegistration(Event event, Users user) {
+        // Validar que el evento esté activo
         if (event.getStatus() == null || !"Active".equals(event.getStatus().getNameState().name())) {
             throw new IllegalArgumentException("Solo puedes inscribirte a eventos activos");
         }
 
-        if (event.getFechaLimiteInscripcion() != null &&
-                Instant.now().isAfter(event.getFechaLimiteInscripcion())) {
-            throw new IllegalArgumentException("La fecha límite de inscripción ha expirado");
+        // Validar que el evento no esté bloqueado
+        if (event.isBloqueado()) {
+            throw new IllegalArgumentException("Este evento está bloqueado y no permite inscripciones");
         }
 
-        if (Instant.now().isAfter(event.getStart())) {
-            throw new IllegalArgumentException("No puedes inscribirte a un evento que ya ha comenzado");
+        // Validar que las inscripciones estén permitidas
+        if (!event.isPermitirInscripciones()) {
+            throw new IllegalArgumentException("Las inscripciones están cerradas para este evento");
+        }
+
+        // Validar que no haya pasado la fecha límite
+        if (event.getFechaLimiteInscripcion() != null &&
+                Instant.now().isAfter(event.getFechaLimiteInscripcion())) {
+            throw new IllegalArgumentException("La fecha límite de inscripción ya pasó");
+        }
+
+        // Validar que el evento no haya comenzado
+        if (event.getStart() != null && Instant.now().isAfter(event.getStart())) {
+            throw new IllegalArgumentException("No puedes inscribirte a un evento que ya comenzó");
+        }
+
+        // Validar capacidad disponible
+        if (event.getMaxAttendees() != null &&
+                event.getCurrentAttendees() >= event.getMaxAttendees()) {
+            throw new IllegalArgumentException("Este evento ya alcanzó su capacidad máxima");
+        }
+
+        // ✅ NUEVA VALIDACIÓN - No permitir inscribirse a su propio evento
+        if (event.getCreator() != null && event.getCreator().getId().equals(user.getId())) {
+            throw new IllegalArgumentException("No puedes inscribirte a tu propio evento");
         }
     }
 
     /**
-     * Inscribe un usuario a un sub-evento
+     * Inscribe un usuario a un sub-evento CON VALIDACIONES MEJORADAS
      */
     @Transactional
     public Inscription registerToSubEvent(String username, InscriptionDto dto) {
         Users user = userRepo.findByUserName(username)
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
 
-        // Verificar si ya está inscrito al sub-evento
-        Optional<Inscription> existingInscription = inscriptionRepo
-                .findByUsuarioUserNameAndSubeventoIdAndEstado(username, dto.getSubeventoId(), "confirmada");
-
-        if (existingInscription.isPresent()) {
-            throw new IllegalArgumentException("Ya estás inscrito en este sub-evento");
-        }
-
         SubEvent subEvent = subEventRepo.findById(dto.getSubeventoId())
                 .orElseThrow(() -> new IllegalArgumentException("Sub-evento no encontrado"));
 
         Event mainEvent = subEvent.getEventoPrincipal();
 
-        // Verificar que esté inscrito al evento principal
-        Optional<Inscription> mainEventInscription = inscriptionRepo
-                .findByUsuarioUserNameAndEventoIdAndEstado(username, mainEvent.getId(), "confirmada");
+        // ✅ VALIDACIÓN MEJORADA - Verificar si ya está inscrito al sub-evento
+        boolean yaEstaInscritoSubEvento = inscriptionRepo.findAll().stream()
+                .anyMatch(inscription ->
+                        inscription.getUsuario() != null &&
+                                inscription.getUsuario().getId().equals(user.getId()) &&
+                                dto.getSubeventoId().equals(inscription.getSubeventoId()) &&
+                                "confirmada".equals(inscription.getEstado()) &&
+                                "subevento".equals(inscription.getTipoInscripcion())
+                );
 
-        if (mainEventInscription.isEmpty()) {
+        if (yaEstaInscritoSubEvento) {
+            throw new IllegalArgumentException("Ya estás inscrito en este sub-evento");
+        }
+
+        // Verificar que esté inscrito al evento principal
+        boolean estaInscritoEventoPrincipal = inscriptionRepo.findAll().stream()
+                .anyMatch(inscription ->
+                        inscription.getUsuario() != null &&
+                                inscription.getUsuario().getId().equals(user.getId()) &&
+                                inscription.getEvento() != null &&
+                                inscription.getEvento().getId().equals(mainEvent.getId()) &&
+                                "confirmada".equals(inscription.getEstado()) &&
+                                "evento_principal".equals(inscription.getTipoInscripcion())
+                );
+
+        if (!estaInscritoEventoPrincipal) {
             throw new IllegalArgumentException("Debes estar inscrito al evento principal para inscribirte a sus sub-eventos");
         }
 
-        // Verificar disponibilidad del sub-evento
-        if (subEvent.getCurrentAttendees() >= subEvent.getMaxAttendees()) {
-            throw new IllegalArgumentException("Sub-evento lleno - no hay cupos disponibles");
-        }
-
-        // Verificar que el sub-evento esté activo
-        if (!"Active".equals(subEvent.getStatus().getNameState().name())) {
-            throw new IllegalArgumentException("Solo puedes inscribirte a sub-eventos activos");
-        }
-
-        // Verificar que el sub-evento no haya comenzado
-        if (Instant.now().isAfter(subEvent.getStart())) {
-            throw new IllegalArgumentException("No puedes inscribirte a un sub-evento que ya ha comenzado");
-        }
+        // Validar disponibilidad del sub-evento
+        validateSubEventForRegistration(subEvent);
 
         // Crear inscripción al sub-evento
         Inscription inscription = Inscription.builder()
@@ -145,12 +167,30 @@ public class InscriptionService {
                 .build();
 
         inscription = inscriptionRepo.save(inscription);
-
-        // Actualizar contador de asistentes del sub-evento
-        subEvent.setCurrentAttendees(subEvent.getCurrentAttendees() + 1);
-        subEventRepo.save(subEvent);
+        updateSubEventAttendeeCount(subEvent);
 
         return inscription;
+    }
+
+    /**
+     * ✅ VALIDACIONES DEL SUB-EVENTO
+     */
+    private void validateSubEventForRegistration(SubEvent subEvent) {
+        // Verificar que el sub-evento esté activo
+        if (subEvent.getStatus() == null || !"Active".equals(subEvent.getStatus().getNameState().name())) {
+            throw new IllegalArgumentException("Solo puedes inscribirte a sub-eventos activos");
+        }
+
+        // Verificar capacidad
+        if (subEvent.getMaxAttendees() != null &&
+                subEvent.getCurrentAttendees() >= subEvent.getMaxAttendees()) {
+            throw new IllegalArgumentException("Este sub-evento ya alcanzó su capacidad máxima");
+        }
+
+        // Verificar que no haya comenzado
+        if (subEvent.getStart() != null && Instant.now().isAfter(subEvent.getStart())) {
+            throw new IllegalArgumentException("No puedes inscribirte a un sub-evento que ya comenzó");
+        }
     }
 
     /**
@@ -158,35 +198,71 @@ public class InscriptionService {
      */
     @Transactional
     public void cancelRegistration(String username, String eventoId) {
-        Inscription inscription = inscriptionRepo
-                .findByUsuarioUserNameAndEventoIdAndEstado(username, eventoId, "confirmada")
-                .orElseThrow(() -> new IllegalArgumentException("No tienes una inscripción activa en este evento"));
+        Users user = userRepo.findByUserName(username)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
 
-        // Verificar que el evento no haya comenzado
-        Event event = eventRepo.findById(eventoId)
-                .orElseThrow(() -> new IllegalArgumentException("Evento no encontrado"));
+        // ✅ BÚSQUEDA MEJORADA de la inscripción
+        Optional<Inscription> inscriptionOpt = inscriptionRepo.findAll().stream()
+                .filter(inscription ->
+                        inscription.getUsuario() != null &&
+                                inscription.getUsuario().getId().equals(user.getId()) &&
+                                inscription.getEvento() != null &&
+                                inscription.getEvento().getId().equals(eventoId) &&
+                                "confirmada".equals(inscription.getEstado()) &&
+                                "evento_principal".equals(inscription.getTipoInscripcion())
+                )
+                .findFirst();
 
-        if (Instant.now().isAfter(event.getStart())) {
-            throw new IllegalArgumentException("No puedes cancelar la inscripción de un evento que ya ha comenzado");
+        if (inscriptionOpt.isEmpty()) {
+            throw new IllegalArgumentException("No tienes una inscripción activa en este evento");
+        }
+
+        Inscription inscription = inscriptionOpt.get();
+        Event event = inscription.getEvento();
+
+        // Validar que se puede cancelar (con margen de tiempo)
+        if (event.getStart() != null) {
+            Instant twoHoursBefore = event.getStart().minusSeconds(2 * 60 * 60); // 2 horas antes
+            if (Instant.now().isAfter(twoHoursBefore)) {
+                throw new IllegalArgumentException("No puedes cancelar la inscripción menos de 2 horas antes del evento");
+            }
         }
 
         // Cancelar inscripción
         inscription.setEstado("cancelada");
         inscriptionRepo.save(inscription);
 
-        // Restaurar contador de asistentes
-        event.setCurrentAttendees(Math.max(0, event.getCurrentAttendees() - 1));
-        eventRepo.save(event);
+        // Actualizar contador de asistentes
+        updateEventAttendeeCount(event);
 
-        // Cancelar automáticamente las inscripciones a sub-eventos
-        List<Inscription> subEventInscriptions = inscriptionRepo
-                .findByUsuarioUserNameAndEventoIdAndEstado(username, eventoId, "confirmada")
-                .stream()
-                .filter(insc -> "subevento".equals(insc.getTipoInscripcion()))
+        // ✅ Cancelar automáticamente las inscripciones a sub-eventos
+        cancelUserSubEventRegistrations(user.getId(), eventoId);
+    }
+
+    /**
+     * ✅ MÉTODO AUXILIAR - Cancela inscripciones a sub-eventos cuando se cancela el evento principal
+     */
+    private void cancelUserSubEventRegistrations(String userId, String eventoId) {
+        List<Inscription> subEventInscriptions = inscriptionRepo.findAll().stream()
+                .filter(inscription ->
+                        inscription.getUsuario() != null &&
+                                inscription.getUsuario().getId().equals(userId) &&
+                                inscription.getEvento() != null &&
+                                inscription.getEvento().getId().equals(eventoId) &&
+                                "confirmada".equals(inscription.getEstado()) &&
+                                "subevento".equals(inscription.getTipoInscripcion())
+                )
                 .collect(Collectors.toList());
 
         for (Inscription subInscription : subEventInscriptions) {
-            cancelSubEventRegistration(username, subInscription.getSubeventoId());
+            subInscription.setEstado("cancelada");
+            inscriptionRepo.save(subInscription);
+
+            // Actualizar contador del sub-evento
+            if (subInscription.getSubeventoId() != null) {
+                subEventRepo.findById(subInscription.getSubeventoId())
+                        .ifPresent(this::updateSubEventAttendeeCount);
+            }
         }
     }
 
@@ -195,35 +271,94 @@ public class InscriptionService {
      */
     @Transactional
     public void cancelSubEventRegistration(String username, String subeventoId) {
-        Inscription inscription = inscriptionRepo
-                .findByUsuarioUserNameAndSubeventoIdAndEstado(username, subeventoId, "confirmada")
-                .orElseThrow(() -> new IllegalArgumentException("No tienes una inscripción activa en este sub-evento"));
+        Users user = userRepo.findByUserName(username)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
 
-        // Verificar que el sub-evento no haya comenzado
+        // ✅ BÚSQUEDA MEJORADA de la inscripción al sub-evento
+        Optional<Inscription> inscriptionOpt = inscriptionRepo.findAll().stream()
+                .filter(inscription ->
+                        inscription.getUsuario() != null &&
+                                inscription.getUsuario().getId().equals(user.getId()) &&
+                                subeventoId.equals(inscription.getSubeventoId()) &&
+                                "confirmada".equals(inscription.getEstado()) &&
+                                "subevento".equals(inscription.getTipoInscripcion())
+                )
+                .findFirst();
+
+        if (inscriptionOpt.isEmpty()) {
+            throw new IllegalArgumentException("No tienes una inscripción activa en este sub-evento");
+        }
+
+        Inscription inscription = inscriptionOpt.get();
         SubEvent subEvent = subEventRepo.findById(subeventoId)
                 .orElseThrow(() -> new IllegalArgumentException("Sub-evento no encontrado"));
 
-        if (Instant.now().isAfter(subEvent.getStart())) {
-            throw new IllegalArgumentException("No puedes cancelar la inscripción de un sub-evento que ya ha comenzado");
+        // Validar que se puede cancelar
+        if (subEvent.getStart() != null) {
+            Instant oneHourBefore = subEvent.getStart().minusSeconds(60 * 60); // 1 hora antes
+            if (Instant.now().isAfter(oneHourBefore)) {
+                throw new IllegalArgumentException("No puedes cancelar la inscripción menos de 1 hora antes del sub-evento");
+            }
         }
 
         // Cancelar inscripción
         inscription.setEstado("cancelada");
         inscriptionRepo.save(inscription);
 
-        // Restaurar contador de asistentes del sub-evento
-        subEvent.setCurrentAttendees(Math.max(0, subEvent.getCurrentAttendees() - 1));
+        // Actualizar contador del sub-evento
+        updateSubEventAttendeeCount(subEvent);
+    }
+
+    /**
+     * ✅ ACTUALIZA CONTADOR DE ASISTENTES DEL EVENTO
+     */
+    private void updateEventAttendeeCount(Event event) {
+        long confirmedCount = inscriptionRepo.findAll().stream()
+                .filter(inscription ->
+                        inscription.getEvento() != null &&
+                                inscription.getEvento().getId().equals(event.getId()) &&
+                                "confirmada".equals(inscription.getEstado()) &&
+                                "evento_principal".equals(inscription.getTipoInscripcion())
+                )
+                .count();
+
+        event.setCurrentAttendees((int) confirmedCount);
+        eventRepo.save(event);
+    }
+
+    /**
+     * ✅ ACTUALIZA CONTADOR DE ASISTENTES DEL SUB-EVENTO
+     */
+    private void updateSubEventAttendeeCount(SubEvent subEvent) {
+        long confirmedCount = inscriptionRepo.findAll().stream()
+                .filter(inscription ->
+                        subEvent.getId().equals(inscription.getSubeventoId()) &&
+                                "confirmada".equals(inscription.getEstado()) &&
+                                "subevento".equals(inscription.getTipoInscripcion())
+                )
+                .count();
+
+        subEvent.setCurrentAttendees((int) confirmedCount);
         subEventRepo.save(subEvent);
     }
+
+    // ================ MÉTODOS DE CONSULTA MEJORADOS ================
 
     /**
      * Lista eventos donde el usuario está inscrito
      */
     @Transactional(readOnly = true)
     public List<Inscription> getUserRegistrations(String username) {
-        return inscriptionRepo.findByUsuarioUserNameAndEstado(username, "confirmada")
-                .stream()
-                .filter(inscription -> "evento_principal".equals(inscription.getTipoInscripcion()))
+        Users user = userRepo.findByUserName(username)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
+
+        return inscriptionRepo.findAll().stream()
+                .filter(inscription ->
+                        inscription.getUsuario() != null &&
+                                inscription.getUsuario().getId().equals(user.getId()) &&
+                                "confirmada".equals(inscription.getEstado()) &&
+                                "evento_principal".equals(inscription.getTipoInscripcion())
+                )
                 .collect(Collectors.toList());
     }
 
@@ -232,18 +367,17 @@ public class InscriptionService {
      */
     @Transactional(readOnly = true)
     public List<Inscription> getUserSubEventRegistrations(String username) {
-        return inscriptionRepo.findByUsuarioUserNameAndEstado(username, "confirmada")
-                .stream()
-                .filter(inscription -> "subevento".equals(inscription.getTipoInscripcion()))
-                .collect(Collectors.toList());
-    }
+        Users user = userRepo.findByUserName(username)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
 
-    /**
-     * Lista todas las inscripciones de un usuario (eventos y sub-eventos)
-     */
-    @Transactional(readOnly = true)
-    public List<Inscription> getAllUserRegistrations(String username) {
-        return inscriptionRepo.findByUsuarioUserNameAndEstado(username, "confirmada");
+        return inscriptionRepo.findAll().stream()
+                .filter(inscription ->
+                        inscription.getUsuario() != null &&
+                                inscription.getUsuario().getId().equals(user.getId()) &&
+                                "confirmada".equals(inscription.getEstado()) &&
+                                "subevento".equals(inscription.getTipoInscripcion())
+                )
+                .collect(Collectors.toList());
     }
 
     /**
@@ -251,9 +385,13 @@ public class InscriptionService {
      */
     @Transactional(readOnly = true)
     public List<Inscription> getEventRegistrations(String eventoId) {
-        return inscriptionRepo.findByEventoIdAndEstado(eventoId, "confirmada")
-                .stream()
-                .filter(inscription -> "evento_principal".equals(inscription.getTipoInscripcion()))
+        return inscriptionRepo.findAll().stream()
+                .filter(inscription ->
+                        inscription.getEvento() != null &&
+                                inscription.getEvento().getId().equals(eventoId) &&
+                                "confirmada".equals(inscription.getEstado()) &&
+                                "evento_principal".equals(inscription.getTipoInscripcion())
+                )
                 .collect(Collectors.toList());
     }
 
@@ -262,7 +400,13 @@ public class InscriptionService {
      */
     @Transactional(readOnly = true)
     public List<Inscription> getSubEventRegistrations(String subeventoId) {
-        return inscriptionRepo.findBySubeventoIdAndEstado(subeventoId, "confirmada");
+        return inscriptionRepo.findAll().stream()
+                .filter(inscription ->
+                        subeventoId.equals(inscription.getSubeventoId()) &&
+                                "confirmada".equals(inscription.getEstado()) &&
+                                "subevento".equals(inscription.getTipoInscripcion())
+                )
+                .collect(Collectors.toList());
     }
 
     /**
@@ -270,9 +414,18 @@ public class InscriptionService {
      */
     @Transactional(readOnly = true)
     public boolean isUserRegistered(String username, String eventoId) {
-        return inscriptionRepo.findByUsuarioUserNameAndEventoIdAndEstado(username, eventoId, "confirmada")
-                .stream()
-                .anyMatch(inscription -> "evento_principal".equals(inscription.getTipoInscripcion()));
+        Users user = userRepo.findByUserName(username)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
+
+        return inscriptionRepo.findAll().stream()
+                .anyMatch(inscription ->
+                        inscription.getUsuario() != null &&
+                                inscription.getUsuario().getId().equals(user.getId()) &&
+                                inscription.getEvento() != null &&
+                                inscription.getEvento().getId().equals(eventoId) &&
+                                "confirmada".equals(inscription.getEstado()) &&
+                                "evento_principal".equals(inscription.getTipoInscripcion())
+                );
     }
 
     /**
@@ -280,20 +433,44 @@ public class InscriptionService {
      */
     @Transactional(readOnly = true)
     public boolean isUserRegisteredToSubEvent(String username, String subeventoId) {
-        return inscriptionRepo.findByUsuarioUserNameAndSubeventoIdAndEstado(username, subeventoId, "confirmada")
-                .isPresent();
+        Users user = userRepo.findByUserName(username)
+                .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
+
+        return inscriptionRepo.findAll().stream()
+                .anyMatch(inscription ->
+                        inscription.getUsuario() != null &&
+                                inscription.getUsuario().getId().equals(user.getId()) &&
+                                subeventoId.equals(inscription.getSubeventoId()) &&
+                                "confirmada".equals(inscription.getEstado()) &&
+                                "subevento".equals(inscription.getTipoInscripcion())
+                );
     }
 
-    /**
-     * Obtiene estadísticas de inscripciones para un evento
-     */
+    // ================ ESTADÍSTICAS (MANTENIDAS) ================
+
     @Transactional(readOnly = true)
     public InscriptionStatsDto getEventInscriptionStats(String eventoId) {
         Event event = eventRepo.findById(eventoId)
                 .orElseThrow(() -> new IllegalArgumentException("Evento no encontrado"));
 
-        long confirmed = inscriptionRepo.countByEventoIdAndEstado(eventoId, "confirmada");
-        long canceled = inscriptionRepo.countByEventoIdAndEstado(eventoId, "cancelada");
+        long confirmed = inscriptionRepo.findAll().stream()
+                .filter(inscription ->
+                        inscription.getEvento() != null &&
+                                inscription.getEvento().getId().equals(eventoId) &&
+                                "confirmada".equals(inscription.getEstado()) &&
+                                "evento_principal".equals(inscription.getTipoInscripcion())
+                )
+                .count();
+
+        long canceled = inscriptionRepo.findAll().stream()
+                .filter(inscription ->
+                        inscription.getEvento() != null &&
+                                inscription.getEvento().getId().equals(eventoId) &&
+                                "cancelada".equals(inscription.getEstado()) &&
+                                "evento_principal".equals(inscription.getTipoInscripcion())
+                )
+                .count();
+
         long available = Math.max(0, event.getMaxAttendees() - confirmed);
         double occupancyRate = event.getMaxAttendees() > 0 ?
                 (double) confirmed / event.getMaxAttendees() * 100 : 0;
@@ -307,16 +484,27 @@ public class InscriptionService {
         );
     }
 
-    /**
-     * Obtiene estadísticas de inscripciones para un sub-evento
-     */
     @Transactional(readOnly = true)
     public InscriptionStatsDto getSubEventInscriptionStats(String subeventoId) {
         SubEvent subEvent = subEventRepo.findById(subeventoId)
                 .orElseThrow(() -> new IllegalArgumentException("Sub-evento no encontrado"));
 
-        long confirmed = inscriptionRepo.countBySubeventoIdAndEstado(subeventoId, "confirmada");
-        long canceled = inscriptionRepo.countBySubeventoIdAndEstado(subeventoId, "cancelada");
+        long confirmed = inscriptionRepo.findAll().stream()
+                .filter(inscription ->
+                        subeventoId.equals(inscription.getSubeventoId()) &&
+                                "confirmada".equals(inscription.getEstado()) &&
+                                "subevento".equals(inscription.getTipoInscripcion())
+                )
+                .count();
+
+        long canceled = inscriptionRepo.findAll().stream()
+                .filter(inscription ->
+                        subeventoId.equals(inscription.getSubeventoId()) &&
+                                "cancelada".equals(inscription.getEstado()) &&
+                                "subevento".equals(inscription.getTipoInscripcion())
+                )
+                .count();
+
         long available = Math.max(0, subEvent.getMaxAttendees() - confirmed);
         double occupancyRate = subEvent.getMaxAttendees() > 0 ?
                 (double) confirmed / subEvent.getMaxAttendees() * 100 : 0;
@@ -330,7 +518,7 @@ public class InscriptionService {
         );
     }
 
-    // DTO para estadísticas de inscripciones
+    // DTO para estadísticas (mantenido igual)
     public static class InscriptionStatsDto {
         private int confirmed;
         private int canceled;
