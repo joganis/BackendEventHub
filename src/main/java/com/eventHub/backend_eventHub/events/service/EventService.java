@@ -205,7 +205,12 @@ public class EventService {
      */
     @Transactional(readOnly = true)
     public List<Event> listMyCreatedEvents(String username) {
-        return eventRepo.findByCreatorUserName(username);
+        // Buscar el usuario por username
+        Users user = userRepo.findByUserName(username)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado: " + username));
+
+        // Usar el método que funciona: findByCreatorId
+        return eventRepo.findByCreatorId(user.getId());
     }
 
     /**

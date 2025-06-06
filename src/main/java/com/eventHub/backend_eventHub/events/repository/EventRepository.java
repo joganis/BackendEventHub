@@ -5,6 +5,7 @@
 package com.eventHub.backend_eventHub.events.repository;
 
 import com.eventHub.backend_eventHub.events.entities.Event;
+import org.bson.types.ObjectId;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.MongoRepository;
@@ -28,9 +29,15 @@ public interface EventRepository extends MongoRepository<Event, String> {
     // ========== BÚSQUEDAS POR CREADOR ==========
 
     @Query("{'creator.userName': ?0}")
-    List<Event> findByCreatorUserName(String userName);
+    List<Event> findByCreatorUserName(String userName);  //esta es la original
 
-    @Query("{'creator.$id': ?0}")
+    @Query("{'creator': {'$ref': 'users', '$id': ?0}}")
+    List<Event> findByCreatorReference(String creatorId); //usar para listar todos
+
+
+//    @Query("{'creator.$id': ?0}")
+//    List<Event> findByCreatorId(String creatorId);
+    @Query("{'creator.$id': ObjectId(?0)}")
     List<Event> findByCreatorId(String creatorId);
 
     @Query("{'creator.userName': ?0}")
