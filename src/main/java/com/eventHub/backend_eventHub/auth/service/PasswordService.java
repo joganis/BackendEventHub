@@ -52,7 +52,7 @@ public class PasswordService {
         emailDto.setRecipientEmail(user.getEmail());
         emailDto.setSubject("Recuperación de Contraseña");
         emailDto.setBody("Para restablecer su contraseña, haga clic en el siguiente enlace: " +
-                "http://localhost:4200/reset-password?token=" + recoveryToken);
+                "https://event-hub-rose-omega.vercel.app/new-password?token=" + recoveryToken);
         emailService.sendEmail(emailDto);
     }
 
