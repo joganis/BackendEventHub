@@ -33,6 +33,7 @@ public class EventService {
     @Autowired private EventRoleRepository eventRoleRepo;
     @Autowired private SubEventRepository subEventRepo;
     @Autowired private InvitationService invitationService;
+    @Autowired private AttendeeInvitationRepository attendeeInvitationRepo;
 
     /**
      * Lista eventos públicos y no bloqueados para usuarios NO AUTENTICADOS
@@ -77,8 +78,14 @@ public class EventService {
     public List<EventSummaryDto> listFeaturedEvents() {
         List<Event> events = eventRepo.findFeaturedPublicEvents("Active");
         return events.stream()
+                .filter(event -> isEventActive(event)) // Filtrar por estado activo
                 .map(this::mapToSummaryDto)
                 .collect(Collectors.toList());
+    }
+
+    private boolean isEventActive(Event event) {
+        return event.getStatus() != null &&
+                "Active".equals(event.getStatus().getNameState().name());
     }
 
     /**
@@ -113,24 +120,41 @@ public class EventService {
     }
 
     /**
-     * Obtiene detalle completo de un evento para usuario autenticado
+     *  MÉTODO ACTUALIZADO - Obtiene detalle completo de un evento para usuario autenticado
+     * Ahora incluye validación de acceso a eventos privados
      */
     @Transactional(readOnly = true)
     public Event getEventDetails(String id, String username) {
-        Event event;
+        Event event = eventRepo.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Evento no encontrado"));
 
         if (username != null) {
-            // Usuario autenticado - verificar acceso a eventos privados
-            event = eventRepo.findAccessibleEventById(id, username);
+            //  Usuario autenticado - verificar acceso según privacidad
+            if ("public".equals(event.getPrivacy())) {
+                // Evento público - verificar que no esté bloqueado
+                if (event.isBloqueado()) {
+                    throw new IllegalArgumentException("Este evento no está disponible");
+                }
+            } else {
+                // Evento privado - verificar permisos de acceso usando nuevo método
+                if (!hasUserAccessToPrivateEvent(username, event)) {
+                    throw new IllegalArgumentException("No tienes acceso a este evento privado");
+                }
+            }
         } else {
             // Usuario no autenticado - solo eventos públicos
-            event = eventRepo.findById(id)
-                    .filter(e -> "public".equals(e.getPrivacy()) && !e.isBloqueado())
-                    .orElse(null);
+            if (!"public".equals(event.getPrivacy())) {
+                throw new IllegalArgumentException("Este evento es privado");
+            }
+
+            if (event.isBloqueado()) {
+                throw new IllegalArgumentException("Este evento no está disponible");
+            }
         }
 
-        if (event == null) {
-            throw new IllegalArgumentException("Evento no encontrado o no tienes acceso a él");
+        //  Verificar que el estado sea activo (común para ambos casos)
+        if (event.getStatus() == null || !"Active".equals(event.getStatus().getNameState().name())) {
+            throw new IllegalArgumentException("Este evento no está activo");
         }
 
         // Cargar subeventos
@@ -351,6 +375,56 @@ public class EventService {
 
         } catch (Exception e) {
             System.err.println("Error en isEventCreator: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Verifica si un usuario tiene acceso a un evento privado
+     */
+    public boolean hasUserAccessToPrivateEvent(String username, Event event) {
+        try {
+            Users user = userRepo.findByUserName(username).orElse(null);
+            if (user == null) {
+                return false;
+            }
+
+            // 1. Verificar si es el creador del evento
+            if (event.getCreator() != null && event.getCreator().getUserName().equals(username)) {
+                return true;
+            }
+
+            // 2. Verificar si es subcreador activo
+            boolean isSubcreator = eventRoleRepo.findAll().stream()
+                    .anyMatch(role ->
+                            role.getUsuario() != null &&
+                                    role.getUsuario().getId().equals(user.getId()) &&
+                                    role.getEvento() != null &&
+                                    role.getEvento().getId().equals(event.getId()) &&
+                                    role.isActivo() &&
+                                    ("CREADOR".equals(role.getRol()) || "SUBCREADOR".equals(role.getRol()))
+                    );
+
+            if (isSubcreator) {
+                return true;
+            }
+
+            // 3. NUEVA VALIDACIÓN - Verificar si está en la lista de invitados
+            if (event.getInvitedUsers() != null && event.getInvitedUsers().contains(username)) {
+                return true;
+            }
+
+            // 4.  NUEVA VALIDACIÓN - Verificar si tiene invitación aceptada
+            return attendeeInvitationRepo.findAll().stream()
+                    .anyMatch(invitation ->
+                            invitation.getEvento() != null &&
+                                    invitation.getEvento().getId().equals(event.getId()) &&
+                                    invitation.getEmailInvitado().equals(user.getEmail()) &&
+                                    "aceptada".equals(invitation.getEstado())
+                    );
+
+        } catch (Exception e) {
+            System.err.println("Error verificando acceso a evento privado: " + e.getMessage());
             return false;
         }
     }

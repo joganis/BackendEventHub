@@ -63,7 +63,8 @@ public interface EventRepository extends MongoRepository<Event, String> {
     @Query("{'bloqueado': false, 'status.nameState': ?0, 'privacy': 'public', 'start': {$gte: ?1}}")
     List<Event> findUpcomingPublicEvents(String status, Instant now);
 
-    @Query("{'bloqueado': false, 'status.nameState': ?0, 'privacy': 'public', 'destacado': true}")
+    @Query(value = "{'privacy': 'public', 'bloqueado': false, 'destacado': true}",
+            fields = "{'id': 1, 'title': 1, 'description': 1, 'start': 1, 'end': 1, 'location': 1, 'categoria': 1, 'type': 1, 'ticketType': 1, 'price': 1, 'maxAttendees': 1, 'currentAttendees': 1, 'mainImages': 1, 'destacado': 1, 'status': 1}")
     List<Event> findFeaturedPublicEvents(String status);
 
     @Query("{'bloqueado': false, 'privacy': 'public', 'createdAt': {$exists: true}}")
@@ -178,3 +179,75 @@ public interface EventRepository extends MongoRepository<Event, String> {
     @Query(value = "{'privacy': ?0, 'status.nameState': {$regex: ?1, $options: 'i'}}", count = true)
     long countByPrivacyAndStatusNameStateIgnoreCase(String privacy, String status);
 }
+
+
+// ================================
+// EventRepository CORREGIDO - Sin referencias anidadas problemáticas
+// ================================
+//
+//package com.eventHub.backend_eventHub.events.repository;
+//
+//import com.eventHub.backend_eventHub.events.entities.Event;
+//import org.springframework.data.domain.Pageable;
+//import org.springframework.data.mongodb.repository.MongoRepository;
+//import org.springframework.data.mongodb.repository.Query;
+//import org.springframework.stereotype.Repository;
+//
+//import java.time.Instant;
+//import java.util.List;
+//import java.util.Optional;
+//
+//@Repository
+//public interface EventRepository extends MongoRepository<Event, String> {
+//
+//    // ✅ CORREGIDO - Sin status.nameState, usar solo campos directos
+//    @Query(value = "{'privacy': 'public', 'bloqueado': false}",
+//            fields = "{'id': 1, 'title': 1, 'description': 1, 'start': 1, 'end': 1, 'location': 1, 'categoria': 1, 'type': 1, 'ticketType': 1, 'price': 1, 'maxAttendees': 1, 'currentAttendees': 1, 'mainImages': 1, 'destacado': 1, 'permitirInscripciones': 1, 'status': 1, 'privacy': 1}")
+//    List<Event> findPublicEventsForUsers(String status);
+//
+//    // ✅ CORREGIDO - Eventos destacados sin referencia anidada
+//    @Query(value = "{'privacy': 'public', 'bloqueado': false, 'destacado': true}",
+//            fields = "{'id': 1, 'title': 1, 'description': 1, 'start': 1, 'end': 1, 'location': 1, 'categoria': 1, 'type': 1, 'ticketType': 1, 'price': 1, 'maxAttendees': 1, 'currentAttendees': 1, 'mainImages': 1, 'destacado': 1, 'status': 1}")
+//    List<Event> findFeaturedPublicEvents(String status);
+//
+//    // ✅ CORREGIDO - Próximos eventos sin referencia anidada
+//    @Query(value = "{'privacy': 'public', 'bloqueado': false, 'start': {$gte: ?1}}",
+//            fields = "{'id': 1, 'title': 1, 'description': 1, 'start': 1, 'end': 1, 'location': 1, 'categoria': 1, 'type': 1, 'ticketType': 1, 'price': 1, 'maxAttendees': 1, 'currentAttendees': 1, 'mainImages': 1, 'destacado': 1, 'status': 1}")
+//    List<Event> findUpcomingPublicEvents(String status, Instant fromDate);
+//
+//    // ✅ CORREGIDO - Eventos recientes sin referencia anidada
+//    @Query(value = "{'privacy': 'public', 'bloqueado': false}",
+//            fields = "{'id': 1, 'title': 1, 'description': 1, 'start': 1, 'end': 1, 'location': 1, 'categoria': 1, 'type': 1, 'ticketType': 1, 'price': 1, 'maxAttendees': 1, 'currentAttendees': 1, 'mainImages': 1, 'destacado': 1, 'status': 1}",
+//            sort = "{'createdAt': -1}")
+//    List<Event> findRecentPublicEvents(Pageable pageable);
+//
+//    // ✅ CORREGIDO - Búsqueda en eventos públicos
+//    @Query(value = "{'privacy': 'public', 'bloqueado': false, '$or': [{'title': {$regex: ?0, $options: 'i'}}, {'description': {$regex: ?0, $options: 'i'}}]}",
+//            fields = "{'id': 1, 'title': 1, 'description': 1, 'start': 1, 'end': 1, 'location': 1, 'categoria': 1, 'type': 1, 'ticketType': 1, 'price': 1, 'maxAttendees': 1, 'currentAttendees': 1, 'mainImages': 1, 'destacado': 1, 'status': 1}")
+//    List<Event> searchPublicEventsByText(String searchText);
+//
+//    // ✅ CORREGIDO - Eventos por categoría (usa categoria.$id en lugar de referencias anidadas)
+//    @Query(value = "{'categoria.$id': ?0}",
+//            fields = "{'id': 1, 'title': 1, 'description': 1, 'start': 1, 'end': 1, 'location': 1, 'categoria': 1, 'privacy': 1, 'bloqueado': 1, 'status': 1}")
+//    List<Event> findByCategoriaId(String categoriaId);
+//
+//    // ✅ CORREGIDO - Eventos creados por usuario (usa creator.$id)
+//    @Query(value = "{'creator.userName': ?0}",
+//            fields = "{'id': 1, 'title': 1, 'description': 1, 'start': 1, 'end': 1, 'location': 1, 'categoria': 1, 'privacy': 1, 'bloqueado': 1, 'status': 1, 'creator': 1, 'maxAttendees': 1, 'currentAttendees': 1, 'permitirInscripciones': 1}")
+//    List<Event> findByCreatorUserName(String username);
+//
+//    // ✅ CORREGIDO - Evento accesible por ID (sin referencia anidada)
+//    @Query(value = "{'_id': ?0, '$or': [{'privacy': 'public'}, {'creator.userName': ?1}, {'invitedUsers': ?1}]}",
+//            fields = "{'creator': 1, 'categoria': 1, 'status': 1, 'id': 1, 'title': 1, 'description': 1, 'start': 1, 'end': 1, 'location': 1, 'privacy': 1, 'bloqueado': 1, 'invitedUsers': 1, 'maxAttendees': 1, 'currentAttendees': 1, 'permitirInscripciones': 1, 'fechaLimiteInscripcion': 1}")
+//    Optional<Event> findAccessibleEventById(String eventId, String username);
+//
+//    // ✅ CORREGIDO - Eventos accesibles para usuario (sin referencia anidada)
+//    @Query(value = "{'$or': [{'privacy': 'public', 'bloqueado': false}, {'creator.userName': ?0}, {'invitedUsers': ?0}]}",
+//            fields = "{'id': 1, 'title': 1, 'description': 1, 'start': 1, 'end': 1, 'location': 1, 'categoria': 1, 'type': 1, 'ticketType': 1, 'price': 1, 'maxAttendees': 1, 'currentAttendees': 1, 'mainImages': 1, 'destacado': 1, 'privacy': 1, 'status': 1}")
+//    List<Event> findAccessibleEventsForUser(String username, String status);
+//
+//    // ✅ NUEVO - Solo información básica del evento para validaciones
+//    @Query(value = "{'_id': ?0}",
+//            fields = "{'id': 1, 'privacy': 1, 'bloqueado': 1, 'status': 1, 'creator': 1, 'invitedUsers': 1, 'permitirInscripciones': 1, 'maxAttendees': 1, 'currentAttendees': 1, 'start': 1, 'fechaLimiteInscripcion': 1}")
+//    Optional<Event> findEventForValidation(String eventId);
+//}

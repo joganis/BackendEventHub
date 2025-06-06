@@ -21,6 +21,7 @@ public class InscriptionService {
     @Autowired private EventRepository eventRepo;
     @Autowired private SubEventRepository subEventRepo;
     @Autowired private UserRepository userRepo;
+    @Autowired private EventService eventService;
 
     /**
      * Inscribe un usuario a un evento principal CON VALIDACIONES MEJORADAS
@@ -105,9 +106,17 @@ public class InscriptionService {
             throw new IllegalArgumentException("Este evento ya alcanzó su capacidad máxima");
         }
 
-        // ✅ NUEVA VALIDACIÓN - No permitir inscribirse a su propio evento
+        // NUEVA VALIDACIÓN - No permitir inscribirse a su propio evento
         if (event.getCreator() != null && event.getCreator().getId().equals(user.getId())) {
             throw new IllegalArgumentException("No puedes inscribirte a tu propio evento");
+        }
+
+        // ✅ NUEVA VALIDACIÓN - Para eventos privados, verificar que tenga acceso
+        if ("private".equals(event.getPrivacy())) {
+            boolean hasAccess = eventService.hasUserAccessToPrivateEvent(user.getUserName(), event);
+            if (!hasAccess) {
+                throw new IllegalArgumentException("No tienes acceso a este evento privado. Necesitas una invitación para poder inscribirte.");
+            }
         }
     }
 

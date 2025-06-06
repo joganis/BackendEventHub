@@ -7,7 +7,6 @@ import com.eventHub.backend_eventHub.domain.enums.StateList;
 import com.eventHub.backend_eventHub.domain.repositories.StateRepository;
 import com.eventHub.backend_eventHub.users.dto.ChangeStatusDto;
 import com.eventHub.backend_eventHub.users.dto.UpdateUserDto;
-import com.eventHub.backend_eventHub.users.exception.UserNotFoundException;
 import com.eventHub.backend_eventHub.users.exception.UserServiceException;
 import com.eventHub.backend_eventHub.users.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,8 +20,6 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.security.Principal;
-import java.util.Arrays;
-import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.*;
