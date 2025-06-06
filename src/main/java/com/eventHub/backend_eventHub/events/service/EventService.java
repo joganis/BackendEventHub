@@ -25,6 +25,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class EventService {
+
+    private String activeStateId = null; // Cache simple
     @Autowired private EventRepository eventRepo;
     @Autowired private UserRepository userRepo;
     @Autowired private StateRepository stateRepo;
@@ -40,12 +42,13 @@ public class EventService {
      */
     @Transactional(readOnly = true)
     public List<EventSummaryDto> listPublicEvents(EventFilterDto filter) {
+        String activeStateId = getActiveStateId(); // 🚀 Usar cache
         List<Event> events;
 
         if (filter == null || isFilterEmpty(filter)) {
-            events = eventRepo.findPublicEventsForUsers("Active");
+            events = eventRepo.findPublicEventsForUsers(activeStateId);
         } else {
-            events = applyPublicFilters(filter);
+            events = applyPublicFilters(filter, activeStateId);
         }
 
         return events.stream()
@@ -93,10 +96,24 @@ public class EventService {
      */
     @Transactional(readOnly = true)
     public List<EventSummaryDto> listUpcomingEvents() {
-        List<Event> events = eventRepo.findUpcomingPublicEvents("Active", Instant.now());
+        String activeStateId = getActiveStateId(); // 🚀 Una sola consulta
+        List<Event> events = eventRepo.findUpcomingPublicActiveEvents(activeStateId, Instant.now());
+
         return events.stream()
                 .map(this::mapToSummaryDto)
                 .collect(Collectors.toList());
+    }
+    /**
+     * Obtiene el ID del estado Active (se cachea para evitar consultas repetidas)
+     */
+    private String getActiveStateId() {
+        if (activeStateId == null) {
+            State activeState = stateRepo.findByNameState(StateList.Active)
+                    .orElseThrow(() -> new RuntimeException("Estado Active no encontrado"));
+            activeStateId = activeState.getId();
+            System.out.println("✅ Estado Active ID obtenido: " + activeStateId);
+        }
+        return activeStateId;
     }
 
     /**
@@ -511,22 +528,95 @@ public class EventService {
     }*/
 
     private boolean isFilterEmpty(EventFilterDto filter) {
-        return filter.getStatus() == null && filter.getCategoriaId() == null &&
-                filter.getSearchText() == null && filter.getStartDate() == null;
+        return (filter.getStatus() == null || filter.getStatus().trim().isEmpty()) &&
+                (filter.getCategoriaId() == null || filter.getCategoriaId().trim().isEmpty()) &&
+                (filter.getType() == null || filter.getType().trim().isEmpty()) &&
+                (filter.getPrivacy() == null || filter.getPrivacy().trim().isEmpty()) &&
+                (filter.getTicketType() == null || filter.getTicketType().trim().isEmpty()) &&
+                (filter.getSearchText() == null || filter.getSearchText().trim().isEmpty()) &&
+                filter.getStartDate() == null &&
+                filter.getEndDate() == null &&
+                filter.getDestacado() == null &&
+                filter.getConDisponibilidad() == null &&
+                (filter.getTags() == null || filter.getTags().isEmpty()) &&
+                (filter.getUbicacionTipo() == null || filter.getUbicacionTipo().trim().isEmpty()) &&
+                filter.getLatitude() == null &&
+                filter.getLongitude() == null &&
+                filter.getRadiusKm() == null;
     }
 
-    private List<Event> applyPublicFilters(EventFilterDto filter) {
-        // Implementar lógica de filtros para eventos públicos
-        if (filter.getSearchText() != null) {
-            return eventRepo.searchPublicEventsByText(filter.getSearchText());
+    private List<Event> applyPublicFilters(EventFilterDto filter, String activeStateId) {
+
+        // 🔍 Filtro por texto de búsqueda
+        if (filter.getSearchText() != null && !filter.getSearchText().trim().isEmpty()) {
+            return eventRepo.searchPublicEventsByText(filter.getSearchText().trim(), activeStateId);
         }
-        if (filter.getCategoriaId() != null) {
-            return eventRepo.findByCategoriaId(filter.getCategoriaId())
+
+        // 🏷️ Filtro por categoría
+        if (filter.getCategoriaId() != null && !filter.getCategoriaId().trim().isEmpty()) {
+            return eventRepo.findPublicEventsByCategory(filter.getCategoriaId(), activeStateId);
+        }
+
+        // 🎯 Filtro por tipo de evento
+        if (filter.getType() != null && !filter.getType().trim().isEmpty()) {
+            return eventRepo.findPublicEventsByType(filter.getType(), activeStateId);
+        }
+
+        // 🎫 Filtro por tipo de ticket
+        if (filter.getTicketType() != null && !filter.getTicketType().trim().isEmpty()) {
+            return eventRepo.findPublicEventsByTicketType(filter.getTicketType(), activeStateId);
+        }
+
+        // ⭐ Filtro por eventos destacados
+        if (filter.getDestacado() != null && filter.getDestacado()) {
+            return eventRepo.findPublicFeaturedEvents(activeStateId);
+        }
+
+        // 📅 Filtro por fechas (aplicado en Java por flexibilidad)
+        if (filter.getStartDate() != null || filter.getEndDate() != null) {
+            return eventRepo.findPublicEventsForUsers(activeStateId)
                     .stream()
-                    .filter(e -> "public".equals(e.getPrivacy()) && !e.isBloqueado())
+                    .filter(event -> {
+                        if (filter.getStartDate() != null && event.getStart().isBefore(filter.getStartDate())) {
+                            return false;
+                        }
+                        if (filter.getEndDate() != null && event.getEnd().isAfter(filter.getEndDate())) {
+                            return false;
+                        }
+                        return true;
+                    })
                     .collect(Collectors.toList());
         }
-        return eventRepo.findPublicEventsForUsers("Active");
+
+        // 🎪 Filtro por disponibilidad
+        if (filter.getConDisponibilidad() != null && filter.getConDisponibilidad()) {
+            return eventRepo.findPublicEventsForUsers(activeStateId)
+                    .stream()
+                    .filter(event -> event.getCurrentAttendees() < event.getMaxAttendees() &&
+                            event.isPermitirInscripciones())
+                    .collect(Collectors.toList());
+        }
+
+        // 🏷️ Filtro por tags
+        if (filter.getTags() != null && !filter.getTags().isEmpty()) {
+            return eventRepo.findPublicEventsForUsers(activeStateId)
+                    .stream()
+                    .filter(event -> event.getTags() != null &&
+                            event.getTags().stream().anyMatch(filter.getTags()::contains))
+                    .collect(Collectors.toList());
+        }
+
+        // 🌍 Filtro por tipo de ubicación
+        if (filter.getUbicacionTipo() != null && !filter.getUbicacionTipo().trim().isEmpty()) {
+            return eventRepo.findPublicEventsForUsers(activeStateId)
+                    .stream()
+                    .filter(event -> event.getLocation() != null &&
+                            filter.getUbicacionTipo().equals(event.getLocation().getType()))
+                    .collect(Collectors.toList());
+        }
+
+        // Si no hay filtros específicos, retornar todos los públicos
+        return eventRepo.findPublicEventsForUsers(activeStateId);
     }
 
     private List<Event> applyAuthenticatedFilters(String username, EventFilterDto filter) {
@@ -551,7 +641,7 @@ public class EventService {
 
     private List<Event> applyFilters(EventFilterDto filter) {
         // Método de compatibilidad - delegar a filtros públicos
-        return applyPublicFilters(filter);
+        return applyPublicFilters(filter, activeStateId);
     }
 
     private EventSummaryDto mapToSummaryDto(Event event) {

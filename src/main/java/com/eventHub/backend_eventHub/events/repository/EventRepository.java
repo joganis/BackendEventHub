@@ -26,6 +26,9 @@ public interface EventRepository extends MongoRepository<Event, String> {
     @Query("{'status.nameState': {$regex: ?0, $options: 'i'}}")
     Page<Event> findByStatusNameStateIgnoreCase(String nameState, Pageable pageable);
 
+    @Query("{'bloqueado': false, 'status.$id': ObjectId(?0), 'privacy': 'public', 'start': {$gte: ?1}}")
+    List<Event> findUpcomingPublicActiveEvents(String activeStateId, Instant now);
+
     // ========== BÚSQUEDAS POR CREADOR ==========
 
     @Query("{'creator.userName': ?0}")
@@ -43,9 +46,36 @@ public interface EventRepository extends MongoRepository<Event, String> {
     @Query("{'creator.userName': ?0}")
     Page<Event> findByCreatorUserName(String userName, Pageable pageable);
 
+
+
+    // ========== BÚSQUEDAS POR id de estados mas eficientes ==========
+
+    @Query("{'privacy': 'public', 'bloqueado': false, 'destacado': true, 'status.$id': ObjectId(?0)}")
+    List<Event> findFeaturedPublicActiveEvents(String activeStateId);
+
+    @Query("{'bloqueado': false, 'privacy': 'public', 'status.$id': ObjectId(?0), 'createdAt': {$exists: true}}")
+    List<Event> findRecentPublicActiveEvents(String activeStateId, Pageable pageable);
+
+    @Query("{'$and': [" +
+            "{'bloqueado': false}, " +
+            "{'status.$id': ObjectId(?1)}, " +
+            "{'$or': [" +
+            "  {'privacy': 'public'}, " +
+            "  {'$and': [{'privacy': 'private'}, {'creator.userName': ?0}]}, " +
+            "  {'$and': [{'privacy': 'private'}, {'invitedUsers': ?0}]}" +
+            "]}" +
+            "]}")
+    List<Event> findAccessibleActiveEventsForUser(String username, String activeStateId);
+
+    @Query("{'bloqueado': false, 'status.$id': ObjectId(?0), 'privacy': 'public'}")
+    List<Event> findPublicActiveEvents(String activeStateId);
+
     // ========== BÚSQUEDAS POR CATEGORÍA ==========
 
-    @Query("{'categoria.$id': ?0}")
+//    @Query("{'categoria.$id': ?0}")   //eliminar se muesran lso eventos para ususarios no auteticados filtrados
+//    List<Event> findByCategoriaId(String categoriaId);
+    // ✅ Mantener este (no tiene referencias problemáticas)
+    @Query("{'categoria.$id': ObjectId(?0)}")
     List<Event> findByCategoriaId(String categoriaId);
 
     @Query("{'categoria.nombreCategoria': ?0}")
@@ -64,10 +94,13 @@ public interface EventRepository extends MongoRepository<Event, String> {
 
     // ========== EVENTOS PÚBLICOS (SIN AUTENTICACIÓN) ==========
 
-    @Query("{'bloqueado': false, 'status.nameState': ?0, 'privacy': 'public'}")
-    List<Event> findPublicEventsForUsers(String status);
+//    @Query("{'bloqueado': false, 'status.nameState': ?0, 'privacy': 'public'}") //paara prueba eliminar si consultas publicas funciona
+//    List<Event> findPublicEventsForUsers(String status);
 
-    @Query("{'bloqueado': false, 'status.nameState': ?0, 'privacy': 'public', 'start': {$gte: ?1}}")
+    @Query("{'bloqueado': false, 'status.$id': ObjectId(?0), 'privacy': 'public'}")
+    List<Event> findPublicEventsForUsers(String activeStateId);
+
+    @Query("{'bloqueado': false,  'privacy': 'public', 'start': {$gte: ?1}}")
     List<Event> findUpcomingPublicEvents(String status, Instant now);
 
     @Query(value = "{'privacy': 'public', 'bloqueado': false, 'destacado': true}",
@@ -89,6 +122,36 @@ public interface EventRepository extends MongoRepository<Event, String> {
             "]}" +
             "]}")
     List<Event> searchPublicEventsByText(String searchText);
+
+    @Query("{'$and': [" +
+            "{'bloqueado': false}, " +
+            "{'privacy': 'public'}, " +
+            "{'status.$id': ObjectId(?1)}, " +
+            "{'$or': [" +
+            "  {'title': {$regex: ?0, $options: 'i'}}, " +
+            "  {'description': {$regex: ?0, $options: 'i'}}, " +
+            "  {'tags': {$regex: ?0, $options: 'i'}}" +
+            "]}" +
+            "]}")
+    List<Event> searchPublicEventsByText(String searchText, String activeStateId);
+    // ✅ CORREGIDO - Eventos públicos por categoría con estado
+    @Query("{'bloqueado': false, 'privacy': 'public', 'status.$id': ObjectId(?1), 'categoria.$id': ObjectId(?0)}")
+    List<Event> findPublicEventsByCategory(String categoriaId, String activeStateId);
+
+    // ✅ NUEVO - Eventos públicos por tipo
+    @Query("{'bloqueado': false, 'privacy': 'public', 'status.$id': ObjectId(?1), 'type': ?0}")
+    List<Event> findPublicEventsByType(String type, String activeStateId);
+
+    // ✅ NUEVO - Eventos públicos por ticket type
+    @Query("{'bloqueado': false, 'privacy': 'public', 'status.$id': ObjectId(?1), 'ticketType': ?0}")
+    List<Event> findPublicEventsByTicketType(String ticketType, String activeStateId);
+
+    // ✅ NUEVO - Eventos públicos destacados
+    @Query("{'bloqueado': false, 'privacy': 'public', 'status.$id': ObjectId(?0), 'destacado': true}")
+    List<Event> findPublicFeaturedEvents(String activeStateId);
+
+
+
 
     // ========== EVENTOS PARA USUARIOS AUTENTICADOS ==========
 

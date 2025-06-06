@@ -19,5 +19,4 @@ public class State {
     @Indexed(unique = true)
     @Field("nombre")
     private StateList nameState;
-
 }
