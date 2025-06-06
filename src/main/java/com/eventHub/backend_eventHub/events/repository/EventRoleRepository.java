@@ -18,20 +18,24 @@ public interface EventRoleRepository extends MongoRepository<EventRole, String> 
 
     // ========== BÚSQUEDAS POR USUARIO ==========
 
-    @Query("{'usuario.$id': ?0, 'activo': true}")
+    @Query("{'usuario.$id': ObjectId(?0), 'activo': true}")
     List<EventRole> findByUsuarioIdAndActivoTrue(String usuarioId);
 
-    @Query("{'usuario.userName': ?0, 'activo': true}")
+    @Query("{'usuario.userName': ObjectId(?0), 'activo': true}")
     List<EventRole> findByUsuarioUserNameAndActivoTrue(String userName);
 
     // ========== BÚSQUEDAS POR EVENTO ==========
 
+
     @Query("{'evento.$id': ?0, 'activo': true}")
     List<EventRole> findByEventoIdAndActivoTrue(String eventoId);
 
+//    @Query("{'evento.$id': ObjectId(?0), 'activo': true}")    //usar este so falla la referencia de arriba
+//    List<EventRole> findByEventoIdAndActivoTrue(String eventoId);
+
     // ========== BÚSQUEDAS COMBINADAS USUARIO + EVENTO ==========
 
-    @Query("{'usuario.$id': ?0, 'evento.$id': ?1, 'activo': true}")
+    @Query("{'usuario.$id': ObjectId(?0), 'evento.$id': ?1, 'activo': true}")      //  antas=> usuario.$id': ?0, ahora =>ObjectId(?0)
     List<EventRole> findByUsuarioIdAndEventoIdAndActivoTrue(String usuarioId, String eventoId);
 
     @Query("{'usuario.userName': ?0, 'evento.$id': ?1, 'activo': true}")
@@ -42,7 +46,7 @@ public interface EventRoleRepository extends MongoRepository<EventRole, String> 
     @Query("{'usuario.userName': ?0, 'rol': ?1, 'activo': true}")
     List<EventRole> findByUsuarioUserNameAndRolAndActivoTrue(String userName, String rol);
 
-    @Query("{'usuario.$id': ?0, 'rol': ?1, 'activo': true}")
+    @Query("{'usuario.$id': ObjectId(?0), 'rol': ?1, 'activo': true}")
     List<EventRole> findByUsuarioIdAndRolAndActivoTrue(String usuarioId, String rol);
 
     // ========== BÚSQUEDAS ESPECÍFICAS CON ROL ==========
@@ -50,8 +54,12 @@ public interface EventRoleRepository extends MongoRepository<EventRole, String> 
     @Query("{'usuario.userName': ?0, 'evento.$id': ?1, 'rol': ?2, 'activo': true}")
     Optional<EventRole> findByUsuarioUserNameAndEventoIdAndRolAndActivoTrue(String userName, String eventoId, String rol);
 
-    @Query("{'usuario.$id': ?0, 'evento.$id': ?1, 'rol': ?2, 'activo': true}")
+//    @Query("{'usuario.$id': ?0, 'evento.$id': ?1, 'rol': ?2, 'activo': true}")
+//    Optional<EventRole> findByUsuarioIdAndEventoIdAndRolAndActivoTrue(String usuarioId, String eventoId, String rol);
+
+    @Query("{'usuario.$id': ObjectId(?0), 'evento.$id': ObjectId(?1), 'rol': ?2, 'activo': true}")
     Optional<EventRole> findByUsuarioIdAndEventoIdAndRolAndActivoTrue(String usuarioId, String eventoId, String rol);
+
 
     // ========== INVITACIONES POR EMAIL ==========
 
@@ -79,4 +87,5 @@ public interface EventRoleRepository extends MongoRepository<EventRole, String> 
 
     @Query("{'usuario.$id': ?0, 'evento.$id': {$in: ?1}, 'activo': true}")
     List<EventRole> findByUsuarioIdAndEventoIdInAndActivoTrue(String usuarioId, List<String> eventoIds);
+
 }

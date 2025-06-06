@@ -218,7 +218,13 @@ public class EventService {
      */
     @Transactional(readOnly = true)
     public List<Event> listEventsAsSubcreator(String username) {
-        List<EventRole> roles = eventRoleRepo.findByUsuarioUserNameAndRolAndActivoTrue(username, "SUBCREADOR");
+        // Buscar el usuario por username
+        Users user = userRepo.findByUserName(username)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado: " + username));
+
+        // Usar findByUsuarioIdAndRolAndActivoTrue en lugar de findByUsuarioUserNameAndRolAndActivoTrue
+        List<EventRole> roles = eventRoleRepo.findByUsuarioIdAndRolAndActivoTrue(user.getId(), "SUBCREADOR");
+
         return roles.stream()
                 .map(role -> role.getEvento())
                 .collect(Collectors.toList());
@@ -384,6 +390,25 @@ public class EventService {
         }
     }
 
+// el mismo que el de arriba pero verifica directamente en la bd el otro lo hace manualmente
+/*    private boolean isEventCreator(String username, String eventId) {
+        try {
+            Users user = userRepo.findByUserName(username).orElse(null);
+            if (user == null) {
+                return false;
+            }
+
+            //  CORREGIDO - usar findByUsuarioIdAndEventoIdAndRolAndActivoTrue
+            Optional<EventRole> role = eventRoleRepo.findByUsuarioIdAndEventoIdAndRolAndActivoTrue(
+                    user.getId(), eventId, "CREADOR");
+
+            return role.isPresent() && role.get().isActivo();
+
+        } catch (Exception e) {
+            System.err.println("Error en isEventCreator: " + e.getMessage());
+            return false;
+        }*/
+
     /**
      * Verifica si un usuario tiene acceso a un evento privado
      */
@@ -460,6 +485,30 @@ public class EventService {
             return false;
         }
     }
+
+
+    // igual al anterior pendiente para probar. mas eficente
+ /*   private boolean canUserEditEvent(String username, String eventId) {
+        try {
+            Users user = userRepo.findByUserName(username).orElse(null);
+            if (user == null) {
+                return false;
+            }
+
+            //  CORREGIDO - buscar por ID de usuario
+            List<EventRole> roles = eventRoleRepo.findByUsuarioIdAndEventoIdAndActivoTrue(user.getId(), eventId);
+
+            return roles.stream()
+                    .anyMatch(role ->
+                            role.isActivo() &&
+                                    (role.getRol().equals("CREADOR") || role.getRol().equals("SUBCREADOR"))
+                    );
+
+        } catch (Exception e) {
+            System.err.println("Error en canUserEditEvent: " + e.getMessage());
+            return false;
+        }
+    }*/
 
     private boolean isFilterEmpty(EventFilterDto filter) {
         return filter.getStatus() == null && filter.getCategoriaId() == null &&
