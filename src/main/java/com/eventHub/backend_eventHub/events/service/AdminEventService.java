@@ -7,6 +7,7 @@ import com.eventHub.backend_eventHub.events.repository.EventRepository;
 import com.eventHub.backend_eventHub.domain.entities.State;
 import com.eventHub.backend_eventHub.domain.repositories.StateRepository;
 import com.eventHub.backend_eventHub.domain.enums.StateList;
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -21,8 +22,13 @@ import java.util.Map;
 
 @Service
 public class AdminEventService {
+
+
     @Autowired private EventRepository eventRepo;
     @Autowired private StateRepository stateRepo;
+
+    // CACHE de IDs de estados
+    private Map<StateList, String> stateIdsCache = new HashMap<>();
 
     /**
      * Lista todos los eventos para administradores (incluye bloqueados)
@@ -110,12 +116,52 @@ public class AdminEventService {
     public Map<String, Object> getEventStatistics() {
         Map<String, Object> stats = new HashMap<>();
 
+        // Total de eventos
         stats.put("total", eventRepo.count());
-        stats.put("active", eventRepo.countByStatusNameStateIgnoreCase("Active"));
-        stats.put("blocked", eventRepo.countByBloqueado(true));
-        stats.put("canceled", eventRepo.countByStatusNameStateIgnoreCase("Canceled"));
-        stats.put("pending", eventRepo.countByStatusNameStateIgnoreCase("Pending"));
 
+        // Estadísticas por estado usando IDs
+        stats.put("active", eventRepo.countByStatusId(getStateId(StateList.Active)));
+        stats.put("canceled", eventRepo.countByStatusId(getStateId(StateList.Canceled)));
+        stats.put("pending", eventRepo.countByStatusId(getStateId(StateList.Pending)));
+        stats.put("inactive", eventRepo.countByStatusId(getStateId(StateList.Inactive)));
+        stats.put("blocked_state", eventRepo.countByStatusId(getStateId(StateList.Blocked)));
+
+        // Eventos bloqueados por campo directo
+        stats.put("blocked", eventRepo.countByBloqueado(true));
+
+        // 📊 Estadísticas adicionales útiles
+        stats.put("public_events", eventRepo.countPublicEventsByStatusId(getStateId(StateList.Active)));
+        stats.put("private_events", eventRepo.countPrivateEventsByStatusId(getStateId(StateList.Active)));
+        stats.put("featured_events", eventRepo.countFeaturedEventsByStatusId(getStateId(StateList.Active)));
         return stats;
+    }
+
+        /**
+         * Obtiene el ID de un estado específico (con cache)
+         */
+    private String getStateId(StateList stateEnum) {
+        if (!stateIdsCache.containsKey(stateEnum)) {
+            State state = stateRepo.findByNameState(stateEnum)
+                    .orElseThrow(() -> new RuntimeException("Estado " + stateEnum + " no encontrado"));
+            stateIdsCache.put(stateEnum, state.getId());
+            System.out.println("✅ Estado " + stateEnum + " ID cacheado: " + state.getId());
+        }
+        return stateIdsCache.get(stateEnum);
+    }
+    /**
+     * Inicializa todos los IDs de estados de una vez (opcional)
+     */
+    @PostConstruct
+    private void initializeStateCache() {
+        System.out.println("🚀 Inicializando cache de estados...");
+
+        // Cargar todos los estados de una vez
+        List<State> allStates = stateRepo.findAll();
+        for (State state : allStates) {
+            stateIdsCache.put(state.getNameState(), state.getId());
+            System.out.println("✅ Estado " + state.getNameState() + " cacheado: " + state.getId());
+        }
+
+        System.out.println("🎯 Cache de estados completado: " + stateIdsCache.size() + " estados");
     }
 }

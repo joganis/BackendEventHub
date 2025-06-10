@@ -248,6 +248,32 @@ public interface EventRepository extends MongoRepository<Event, String> {
 
     @Query(value = "{'privacy': ?0, 'status.nameState': {$regex: ?1, $options: 'i'}}", count = true)
     long countByPrivacyAndStatusNameStateIgnoreCase(String privacy, String status);
+
+    // Contadores por estado con ID
+    @Query(value = "{'status.$id': ObjectId(?0)}", count = true)
+    long countByStatusId(String statusId);
+
+    @Query(value = "{'status.$id': ObjectId(?0), 'privacy': 'public'}", count = true)
+    long countPublicEventsByStatusId(String statusId);
+
+    @Query(value = "{'status.$id': ObjectId(?0), 'privacy': 'private'}", count = true)
+    long countPrivateEventsByStatusId(String statusId);
+
+    @Query(value = "{'status.$id': ObjectId(?0), 'destacado': true}", count = true)
+    long countFeaturedEventsByStatusId(String statusId);
+
+    @Query(value = "{'status.$id': ObjectId(?0), 'bloqueado': false}", count = true)
+    long countActiveEventsByStatusId(String statusId);
+
+    // Contadores adicionales útiles
+    @Query(value = "{'status.$id': ObjectId(?0), 'privacy': 'public', 'bloqueado': false}", count = true)
+    long countPublicActiveEventsByStatusId(String statusId);
+
+    @Query(value = "{'status.$id': ObjectId(?0), 'type': ?1}", count = true)
+    long countEventsByStatusAndType(String statusId, String type);
+
+    @Query(value = "{'status.$id': ObjectId(?0), 'ticketType': ?1}", count = true)
+    long countEventsByStatusAndTicketType(String statusId, String ticketType);
 }
 
 
