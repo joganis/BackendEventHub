@@ -240,8 +240,8 @@ public interface EventRepository extends MongoRepository<Event, String> {
 
     // ========== CONTADORES ==========
 
-    @Query(value = "{'status.nameState': {$regex: ?0, $options: 'i'}}", count = true)
-    long countByStatusNameStateIgnoreCase(String nameState);
+//    @Query(value = "{'status.nameState': {$regex: ?0, $options: 'i'}}", count = true)
+//    long countByStatusNameStateIgnoreCase(String nameState);
 
     @Query(value = "{'bloqueado': ?0}", count = true)
     long countByBloqueado(boolean bloqueado);
