@@ -2,6 +2,7 @@ package com.eventHub.backend_eventHub.admin.controller;
 
 
 import com.eventHub.backend_eventHub.admin.dto.NewAdminDto;
+import com.eventHub.backend_eventHub.admin.exception.CustomException;
 import com.eventHub.backend_eventHub.admin.service.AdminService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,13 +32,16 @@ public class AdminControllerRegister {
     @PostMapping("/register")
     public ResponseEntity<String> registerAdmin(@Valid @RequestBody NewAdminDto newAdminDto, BindingResult bindingResult) {
         if (bindingResult.hasErrors()) {
-            return ResponseEntity.badRequest().body("Revise los campos");
+            return ResponseEntity.badRequest().body("Error en los datos enviados: " + bindingResult.getFieldError().getDefaultMessage());
         }
+
         try {
             adminService.registerAdmin(newAdminDto);
-            return ResponseEntity.status(HttpStatus.CREATED).body("Administrador registrado");
+            return ResponseEntity.status(HttpStatus.CREATED).body("Administrador registrado correctamente");
+        } catch (CustomException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error inesperado: " + e.getMessage());
         }
     }
 }

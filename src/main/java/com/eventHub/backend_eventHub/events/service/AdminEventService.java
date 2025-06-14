@@ -129,7 +129,7 @@ public class AdminEventService {
         // Eventos bloqueados por campo directo
         stats.put("blocked", eventRepo.countByBloqueado(true));
 
-        // 📊 Estadísticas adicionales útiles
+        //  Estadísticas adicionales útiles
         stats.put("public_events", eventRepo.countPublicEventsByStatusId(getStateId(StateList.Active)));
         stats.put("private_events", eventRepo.countPrivateEventsByStatusId(getStateId(StateList.Active)));
         stats.put("featured_events", eventRepo.countFeaturedEventsByStatusId(getStateId(StateList.Active)));

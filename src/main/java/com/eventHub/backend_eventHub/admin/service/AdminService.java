@@ -2,11 +2,15 @@ package com.eventHub.backend_eventHub.admin.service;
 
 
 import com.eventHub.backend_eventHub.admin.dto.NewAdminDto;
+import com.eventHub.backend_eventHub.admin.exception.CustomException;
 import com.eventHub.backend_eventHub.domain.entities.Role;
+import com.eventHub.backend_eventHub.domain.entities.State;
 import com.eventHub.backend_eventHub.domain.entities.Users;
 import com.eventHub.backend_eventHub.domain.enums.RoleList;
+import com.eventHub.backend_eventHub.domain.enums.StateList;
 import com.eventHub.backend_eventHub.domain.repositories.RoleRepository;
 import com.eventHub.backend_eventHub.auth.service.UserAuthService;
+import com.eventHub.backend_eventHub.domain.repositories.StateRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -23,12 +27,14 @@ public class AdminService {
     private final UserAuthService userAuthService;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final StateRepository stateRepository;
 
     @Autowired
-    public AdminService(UserAuthService userAuthService, RoleRepository roleRepository, PasswordEncoder passwordEncoder) {
+    public AdminService(UserAuthService userAuthService, RoleRepository roleRepository, PasswordEncoder passwordEncoder, StateRepository stateRepository) {
         this.userAuthService = userAuthService;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
+        this.stateRepository = stateRepository;
     }
 
     /**
@@ -42,26 +48,42 @@ public class AdminService {
     @Transactional
     public void registerAdmin(NewAdminDto newAdminDto) {
         if (userAuthService.existsByUserName(newAdminDto.getUserName())) {
-            throw new IllegalArgumentException("El nombre de usuario ya existe");
+            throw new CustomException("El nombre de usuario ya está en uso");
+        }
+
+        if (userAuthService.existsByEmail(newAdminDto.getEmail())) {
+            throw new CustomException("El correo electrónico ya está registrado");
         }
         // Validar y convertir el rol proporcionado
         RoleList roleRequested;
         try {
             roleRequested = RoleList.valueOf(newAdminDto.getRole());
             if (roleRequested != RoleList.ROLE_ADMIN && roleRequested != RoleList.ROLE_SUBADMIN) {
-                throw new IllegalArgumentException("Rol no permitido para registro de admin");
+                throw new CustomException("Rol no permitido. Solo se permite ADMIN o SUBADMIN");
             }
         } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Rol inválido: " + newAdminDto.getRole());
+            throw new CustomException("Rol inválido: " + newAdminDto.getRole());
         }
         Role roleAdmin = roleRepository.findByNombreRol(roleRequested)
-                .orElseThrow(() -> new RuntimeException("Rol no encontrado"));
+                .orElseThrow(() -> new CustomException("Rol no encontrado en base de datos"));
+        State activeState = stateRepository.findByNameState(StateList.Active)
+                .orElseThrow(() -> new CustomException("Estado 'ACTIVO' no encontrado"));
         Users user = new Users(
                 newAdminDto.getUserName(),
                 newAdminDto.getEmail(),
                 passwordEncoder.encode(newAdminDto.getPassword()),
-                roleAdmin
+                roleAdmin,
+                activeState
         );
+        user.setName(newAdminDto.getName());
+        user.setLastName(newAdminDto.getLastName());
+        user.setIdentification(newAdminDto.getIdentification());
+        user.setBirthDate(newAdminDto.getBirthDate());
+        user.setPhone(newAdminDto.getPhone());
+        user.setHomeAddress(newAdminDto.getHomeAddress());
+        user.setCountry(newAdminDto.getCountry());
+        user.setCity(newAdminDto.getCity());
+        user.setPhoto(newAdminDto.getPhoto());
         userAuthService.save(user);
     }
 }
